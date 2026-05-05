@@ -1,0 +1,29 @@
+# Computer vision & image processing
+opencv-python
+Pillow
+albumentations
+
+# Scientific computing
+numpy
+scipy
+scikit-learn
+
+
+# Data handling
+h5py
+pandas
+tqdm
+
+
+# Visualization
+matplotlib
+seaborn
+tensorboard
+
+# Video processing (for CelebV-HQ clips)
+imageio
+imageio-ffmpeg
+av
+
+# Utilities
+einops
