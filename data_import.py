@@ -1,7 +1,12 @@
-import yaml
+# import yaml
+#
+# with open("configs/default.yaml", "r") as f:
+#     cfg = yaml.safe_load(f)
+#
+# DATA_ROOT = cfg["data_root"]
+# print("Using data from:", DATA_ROOT)
 
-with open("configs/default.yaml", "r") as f:
-    cfg = yaml.safe_load(f)
+import os
+from pathlib import Path
 
-DATA_ROOT = cfg["data_root"]
-print("Using data from:", DATA_ROOT)
+DATA_ROOT = Path(os.environ.get("DATA_ROOT", "/scratch/sofyanali/celebvhq/videos"))
