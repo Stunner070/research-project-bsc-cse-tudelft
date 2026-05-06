@@ -27,3 +27,4 @@ av
 
 # Utilities
 einops
+pyyaml
