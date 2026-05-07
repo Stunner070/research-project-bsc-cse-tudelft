@@ -9,4 +9,4 @@
 import os
 from pathlib import Path
 
-DATA_ROOT = Path(os.environ.get("DATA_ROOT", "/scratch/sofyanali/celebvhq/videos"))
+DATA_ROOT = Path("/scratch/sofyanali/celebvhq/videos")
