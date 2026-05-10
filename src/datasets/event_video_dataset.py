@@ -28,7 +28,7 @@ class EventVideoDataset(Dataset):
 
         if self.mode == "event_frames":
             npy_path = self.frames_root / video_id / "event_frames.npy"
-            frames = np.load(npy_path)
+            frames = np.load(npy_path, mmap_mode='r')
             T = frames.shape[0]
 
             if T == 0:
@@ -42,7 +42,7 @@ class EventVideoDataset(Dataset):
                 else:
                     t = np.random.randint(0, T)
 
-                frame = frames[t]
+                frame = np.array(frames[t]) # Copy slice to memory
                 # Convert to (1, H, W) tensor
                 frame_tensor = torch.from_numpy(frame).unsqueeze(0).float()
 
@@ -81,4 +81,3 @@ class EventVideoDataset(Dataset):
             frame_tensor = self.transform(frame_tensor)
 
         return frame_tensor, label
-

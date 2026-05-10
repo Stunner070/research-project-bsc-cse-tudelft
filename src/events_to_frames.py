@@ -47,9 +47,6 @@ def events_to_frames(events: np.ndarray,
 
     device = get_device(device_arg)
     
-    # Initialize the output sequence directly on the appropriate device
-    frames = torch.zeros((T, H, W), dtype=torch.float32, device=device)
-
     # Convert the entire events array to a tensor on the device for fast slicing
     events_tensor = torch.from_numpy(events).to(device)
 
@@ -70,14 +67,36 @@ def events_to_frames(events: np.ndarray,
     y_valid = y[valid_mask]
     p_valid = p[valid_mask]
 
+    frames_np = np.zeros((T, H, W), dtype=np.float32)
+
     if len(k_valid) > 0:
         # Signed contribution
         p_signed = torch.where(p_valid == 1.0, 1.0, -1.0)
-        # Accumulate using index_put_ onto the full 3D spatiotemporal tensor in one shot
-        frames.index_put_((k_valid, y_valid, x_valid), p_signed, accumulate=True)
+
+        # Process in chunks of T to save memory (chunking time axis to prevent large OOMs)
+        MAX_FRAMES_PER_CHUNK = 256
+
+        for start_k in range(0, T, MAX_FRAMES_PER_CHUNK):
+            end_k = min(start_k + MAX_FRAMES_PER_CHUNK, T)
+
+            chunk_mask = (k_valid >= start_k) & (k_valid < end_k)
+            if not chunk_mask.any():
+                continue
+
+            k_chunk = k_valid[chunk_mask] - start_k
+            y_chunk = y_valid[chunk_mask]
+            x_chunk = x_valid[chunk_mask]
+            p_chunk = p_signed[chunk_mask]
+
+            # Initialize chunk on device
+            frames_chunk = torch.zeros((end_k - start_k, H, W), dtype=torch.float32, device=device)
+            frames_chunk.index_put_((k_chunk, y_chunk, x_chunk), p_chunk, accumulate=True)
+
+            # Copy back to CPU numpy array
+            frames_np[start_k:end_k] = frames_chunk.cpu().numpy()
 
     # Return the accumulated frames sequence back to CPU as a NumPy array
-    return frames.cpu().numpy()
+    return frames_np
 
 def save_frames_npy(frames: np.ndarray, output_path: Union[str, Path]) -> None:
     """
