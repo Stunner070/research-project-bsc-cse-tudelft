@@ -9,5 +9,5 @@
 
 srun source ~/projects/.venv/bin/activate
 
-srun cd ~/projects/rpbsc
+srun cd ~/projects/rpbsc/src/scripts
 srun python run_full_pipeline.py --mode event_frames_only  --device cuda --max_samples 1
