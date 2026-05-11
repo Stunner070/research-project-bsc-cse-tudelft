@@ -4,10 +4,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # Root directory with per-video v2e outputs (events.h5 + dvs.avi)
-V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346/") # TODO: set this once
+V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346") # TODO: set this once
 
 # Root directory for all derived outputs
-WORK_DIR = Path("/home/sofyanali/projects/rpbsc/output/") # TODO: set this once
+WORK_DIR = Path("/home/sofyanali/projects/rpbsc/output") # TODO: set this once
 
 # Info json
 CELEBVHQ_INFO_JSON = PROJECT_ROOT / "celebvhq_info.json"
