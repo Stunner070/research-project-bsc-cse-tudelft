@@ -9,4 +9,4 @@
 
 srun source ~/projects/.venv/bin/activate
 
-srun python ~/projects/rpbsc/src/scripts/run_full_pipeline.py --mode all
+srun python ~/projects/rpbsc/src/scripts/run_full_pipeline.py --mode event_frames_only

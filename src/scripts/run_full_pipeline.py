@@ -10,6 +10,7 @@ from src.scripts.build_splits import build_splits
 from src.scripts.batch_convert_events import batch_convert_events
 from src.scripts.train_compare_representations import run_training
 import config
+import torch
 
 def main():
     parser = argparse.ArgumentParser(description="Orchestrate the full event-based face-ReID experiment pipeline.")
@@ -22,6 +23,26 @@ def main():
     parser.add_argument("--max_samples", type=int, default=None, help="Limit number of manifest samples to process.")
     parser.add_argument("--force_conversion", action="store_true", help="Force overwrite of existing converted event arrays.")
     args = parser.parse_args()
+
+    # GPU Check
+    print("====================================")
+    print("System Check: Computing Devices")
+    print("====================================")
+    has_gpu = torch.cuda.is_available()
+    
+    if args.device == "auto":
+        resolved_device = "cuda" if has_gpu else "cpu"
+    else:
+        resolved_device = args.device
+
+    if has_gpu and resolved_device == "cuda":
+        print(f"-> GPU detected! ({torch.cuda.get_device_name(0)})")
+        print("-> The pipeline will run accelerated on the GPU.")
+    elif resolved_device == "cpu":
+        print("-> GPU not detected or CPU forced.")
+        print("-> The pipeline will run on standard CPU.")
+        
+    args.device = resolved_device
 
     # Ensure directories exist
     config.MANIFEST_DIR.mkdir(parents=True, exist_ok=True)

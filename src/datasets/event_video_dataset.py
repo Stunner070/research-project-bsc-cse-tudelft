@@ -44,23 +44,36 @@ class EventVideoDataset(Dataset):
 
         if self.mode == "event_frames":
             npy_path = self.frames_root / video_id / "event_frames.npy"
-            frames = np.load(npy_path, mmap_mode='r')
-            T = frames.shape[0]
 
-            if T == 0:
-                frame_tensor = torch.zeros((1, 768, 1024), dtype=torch.float32)
-            else:
-                if self.max_frames is not None and T > self.max_frames:
-                    # Randomly sample max_frames indices
-                    indices = np.random.choice(T, self.max_frames, replace=False)
-                    # For now, return a single randomly chosen frame from the sampled indices
-                    t = np.random.choice(indices)
+            with open(npy_path, 'rb') as f:
+                version = np.lib.format.read_magic(f)
+                if version == (1, 0):
+                    shape, fortran_order, dtype = np.lib.format.read_array_header_1_0(f)
                 else:
-                    t = np.random.randint(0, T)
+                    shape, fortran_order, dtype = np.lib.format.read_array_header_2_0(f)
 
-                frame = np.array(frames[t]) # Copy slice to memory
-                # Convert to (1, H, W) tensor
-                frame_tensor = torch.from_numpy(frame).unsqueeze(0).float()
+                T = shape[0]
+
+                if T == 0:
+                    frame = np.zeros((768, 1024), dtype=np.float32)
+                else:
+                    if self.max_frames is not None and T > self.max_frames:
+                        indices = np.random.choice(T, self.max_frames, replace=False)
+                        t = np.random.choice(indices)
+                    else:
+                        t = np.random.randint(0, T)
+
+                    data_offset = f.tell()
+                    frame_bytes = np.dtype(dtype).itemsize * shape[1] * shape[2]
+                    f.seek(data_offset + t * frame_bytes)
+
+                    frame = np.fromfile(f, dtype=dtype, count=shape[1] * shape[2])
+                    if frame.size < shape[1] * shape[2]:
+                        frame = np.zeros((shape[1], shape[2]), dtype=np.float32)
+                    else:
+                        frame = frame.reshape((shape[1], shape[2]))
+
+            frame_tensor = torch.from_numpy(frame.copy()).unsqueeze(0).float()
 
         elif self.mode == "dvs_avi":
             dvs_path = row['dvs_avi_path']
