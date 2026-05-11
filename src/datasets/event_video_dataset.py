@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 
 class EventVideoDataset(Dataset):
-    def __init__(self, manifest_csv, mode="event_frames", frames_root=None, transform=None, max_frames=None):
+    def __init__(self, manifest_csv, mode="event_frames", frames_root=None, transform=None, max_frames=None, id_to_int=None):
         self.mode = mode
         self.frames_root = Path(frames_root) if frames_root else None
         self.transform = transform
@@ -14,9 +14,24 @@ class EventVideoDataset(Dataset):
 
         self.df = pd.read_csv(manifest_csv)
 
-        # Build mapping from identity_id to integer label
-        unique_ids = self.df['identity_id'].unique()
-        self.id_to_int = {identity: i for i, identity in enumerate(unique_ids)}
+        # Build mapping from identity_id to integer label if not provided
+        id_col = 'identity' if 'identity' in self.df.columns else ('identity_id' if 'identity_id' in self.df.columns else 'video_id')
+        self.id_col = id_col
+        # Drop missing files
+        if self.mode == "event_frames" and self.frames_root:
+            exists = self.df['video_id'].apply(lambda vid: (self.frames_root / vid / "event_frames.npy").exists())
+            if not exists.all():
+                print(f"Warning: dropping {sum(~exists)} samples missing event_frames.npy")
+                self.df = self.df[exists]
+
+        if len(self.df) == 0:
+            raise ValueError(f"No valid samples remaining in {manifest_csv}")
+
+        unique_ids = self.df[id_col].unique()
+        if id_to_int is None:
+            self.id_to_int = {identity: i for i, identity in enumerate(unique_ids)}
+        else:
+            self.id_to_int = id_to_int
 
     def __len__(self):
         return len(self.df)
@@ -24,7 +39,8 @@ class EventVideoDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         video_id = row['video_id']
-        label = self.id_to_int[row['identity_id']]
+        # If testing, label might not be in id_to_int, just assign -1 in that case for evaluation
+        label = self.id_to_int.get(row[self.id_col], -1)
 
         if self.mode == "event_frames":
             npy_path = self.frames_root / video_id / "event_frames.npy"
@@ -49,7 +65,7 @@ class EventVideoDataset(Dataset):
         elif self.mode == "dvs_avi":
             dvs_path = row['dvs_avi_path']
             # Open video with OpenCV
-            cap = cv2.VideoCapture(dvs_path)
+            cap = cv2.VideoCapture(str(dvs_path))
             all_frames = []
 
             while True:
@@ -80,4 +96,4 @@ class EventVideoDataset(Dataset):
         if self.transform:
             frame_tensor = self.transform(frame_tensor)
 
-        return frame_tensor, label
+        return frame_tensor, label, video_id

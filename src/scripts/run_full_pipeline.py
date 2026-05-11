@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from src.scripts.build_manifest import build_manifest
+from src.scripts.build_splits import build_splits
 from src.scripts.batch_convert_events import batch_convert_events
 from src.scripts.train_compare_representations import run_training
 import config
@@ -27,19 +28,40 @@ def main():
     config.FRAMES_ROOT.mkdir(parents=True, exist_ok=True)
     config.MODELS_EVENT_FRAMES.mkdir(parents=True, exist_ok=True)
     config.MODELS_DVS_AVI.mkdir(parents=True, exist_ok=True)
+    config.SPLITS_DIR.mkdir(parents=True, exist_ok=True)
 
     manifest_path = config.MANIFEST_DIR / "manifest.csv"
+    manifest_enriched = config.MANIFEST_DIR / "manifest_enriched.csv"
 
     print("====================================")
     print("Step 1: Building Manifest")
     print("====================================")
     build_manifest(config.V2E_ROOT, manifest_path)
 
+    print("\n====================================")
+    print("Step 1b: Building Enriched Canonical Splits")
+    print("====================================")
+    build_splits(
+        manifest_path,
+        config.CELEBVHQ_INFO_JSON,
+        manifest_enriched,
+        config.SPLITS_DIR,
+        id_column="ytb_id"
+    )
+
+    train_csv = config.SPLITS_DIR / "train.csv"
+    val_csv = config.SPLITS_DIR / "val.csv"
+
+    # Safety check
+    if not train_csv.exists() or not val_csv.exists():
+        print("No valid split can be formed (maybe not enough data?)")
+        return
+
     if args.mode in ["all", "event_frames_only"]:
         print("\n====================================")
         print("Step 2: Converting Events to Event-Frames")
         print("====================================")
-        print(f"  manifest: {manifest_path}")
+        print(f"  manifest: {manifest_enriched}")
         print(f"  output root: {config.FRAMES_ROOT}")
         print(f"  dt: {args.dt}")
         print(f"  device: {args.device}")
@@ -47,7 +69,7 @@ def main():
         print(f"  force: {args.force_conversion}")
 
         batch_convert_events(
-            manifest_csv=manifest_path,
+            manifest_csv=manifest_enriched,
             output_root=config.FRAMES_ROOT,
             dt=args.dt,
             height=config.EVENT_HEIGHT,
@@ -61,7 +83,8 @@ def main():
         print("Step 3: Training on Event-Frames")
         print("====================================")
         run_training(
-            manifest_csv=manifest_path,
+            train_csv=train_csv,
+            val_csv=val_csv,
             mode="event_frames",
             frames_root=config.FRAMES_ROOT,
             output_dir=config.MODELS_EVENT_FRAMES,
@@ -78,7 +101,8 @@ def main():
         print("Step 4: Training on dvs.avi (Grayscale)")
         print("====================================")
         run_training(
-            manifest_csv=manifest_path,
+            train_csv=train_csv,
+            val_csv=val_csv,
             mode="dvs_avi",
             frames_root=None,
             output_dir=config.MODELS_DVS_AVI,
