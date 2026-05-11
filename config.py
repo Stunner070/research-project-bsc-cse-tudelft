@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346/") # TODO: set this once
 
 # Root directory for all derived outputs
-WORK_DIR = Path("C:/Users/sofya/Desktop/rp code/output") # TODO: set this once
+WORK_DIR = Path("/home/sofyanali/projects/rpbsc/output/") # TODO: set this once
 
 # Info json
 CELEBVHQ_INFO_JSON = PROJECT_ROOT / "celebvhq_info.json"
