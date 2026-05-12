@@ -20,7 +20,11 @@ def get_device(device_arg: str = 'auto') -> torch.device:
 class ReidBaseline(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        resnet = models.resnet50(weights=None)
+        try:
+            resnet = models.resnet50(weights=None)
+        except TypeError:
+            # Fallback for older torchvision versions on clusters like DelftBlue
+            resnet = models.resnet50(pretrained=False)
         # 1-channel input
         resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.backbone = nn.Sequential(*list(resnet.children())[:-1])
