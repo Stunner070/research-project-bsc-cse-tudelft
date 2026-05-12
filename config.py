@@ -4,11 +4,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # Root directory with per-video v2e outputs (events.h5 + dvs.avi)
-V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346")
+V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346/")
 # V2E_ROOT = Path("C:/Users/sofya/Desktop/event_videos/346x260")
 
 # Root directory for all derived outputs
-WORK_DIR = Path("/scratch/sofyanali/celebvhq/output")
+WORK_DIR = Path("/scratch/sofyanali/celebvhq/output/")
 # WORK_DIR = Path("C:/Users/sofya/Desktop/rp code/output")
 
 # Info json
@@ -26,5 +26,5 @@ EVENT_HEIGHT = 260
 EVENT_WIDTH = 346
 DEFAULT_DT = 5000.0
 DEFAULT_EPOCHS = 50
-DEFAULT_BATCH_SIZE = 4
-DEFAULT_NUM_WORKERS = 0
+DEFAULT_BATCH_SIZE = 16
+DEFAULT_NUM_WORKERS = 4

@@ -2,7 +2,7 @@
 #SBATCH --job-name=testrun
 #SBATCH --partition=gpu
 #SBATCH --account=education-eemcs-courses-cse3000
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
 #SBATCH --mem-per-cpu=1GB

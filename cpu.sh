@@ -2,7 +2,7 @@
 #SBATCH --job-name=testrun
 #SBATCH --partition=compute
 #SBATCH --account=education-eemcs-courses-cse3000
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
 #SBATCH --mem-per-cpu=3GB
 #SBATCH --time=01:10:00

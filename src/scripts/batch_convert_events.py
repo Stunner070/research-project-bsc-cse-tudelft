@@ -3,6 +3,7 @@ import csv
 import sys
 import time
 from pathlib import Path
+import concurrent.futures
 
 # Assumes this script is run from a path where src is in PYTHONPATH,
 # or we can append the parent dir to sys.path
@@ -37,7 +38,8 @@ def batch_convert_events(manifest_csv: Path, output_root: Path, dt: float,
     fails = 0
     t_start_batch = time.perf_counter()
 
-    for i, row in enumerate(rows, start=1):
+    def process_row(args):
+        i, row = args
         video_id = row["video_id"]
         events_path = Path(row["events_path"])
 
@@ -45,29 +47,21 @@ def batch_convert_events(manifest_csv: Path, output_root: Path, dt: float,
         out_dir.mkdir(parents=True, exist_ok=True)
         out_file = out_dir / "event_frames.npy"
 
-        print(f"[{i}/{total_videos}] Processing {events_path} -> {out_file}")
-
-        t0_file = time.perf_counter()
-
         if out_file.exists() and not force:
-            print(f"[{i}/{total_videos}] Skipping {video_id}, file already exists.")
-            success += 1
-            continue
+            return (True, f"[{i}/{total_videos}] Skipping {video_id}, file already exists.")
 
         if not events_path.exists():
-            print(f"[{i}/{total_videos}] Error: {events_path} not found. Skipping.")
-            fails += 1
-            continue
+            return (False, f"[{i}/{total_videos}] Error: {events_path} not found. Skipping.")
 
         try:
+            t0_file = time.perf_counter()
+
             # Timing HDF5 Read
             t0_read = time.perf_counter()
             events = load_events(events_path)
             t_read = time.perf_counter() - t0_read
 
             num_events = len(events)
-            t_min, t_max = (events[:, 0].min(), events[:, 0].max()) if num_events > 0 else (0, 0)
-            print(f"[{i}/{total_videos}] Loaded {num_events} events (t: {t_min:.1f} to {t_max:.1f}) in {t_read:.3f}s.")
 
             # Timing Conversion
             t0_conv = time.perf_counter()
@@ -81,13 +75,29 @@ def batch_convert_events(manifest_csv: Path, output_root: Path, dt: float,
 
             t_file = time.perf_counter() - t0_file
 
-            print(f"[{i}/{total_videos}] Saved numpy array shape {frames.shape}, dtype {frames.dtype} in {t_file:.3f}s "
-                  f"(conv: {t_conv:.3f}s, save: {t_save:.3f}s)")
-            success += 1
+            msg = f"[{i}/{total_videos}] {video_id} handled {num_events} events. Saved array {frames.shape} in {t_file:.3f}s (read: {t_read:.2f}s, conv: {t_conv:.2f}s, save: {t_save:.2f}s)"
+            return (True, msg)
 
         except Exception as e:
-            print(f"[{i}/{total_videos}] Conversion crashed for {video_id}: {e}")
-            fails += 1
+            return (False, f"[{i}/{total_videos}] Conversion crashed for {video_id}: {e}")
+
+    # Use ThreadPoolExecutor or ProcessPoolExecutor depending on device
+    # For GPU operations in PyTorch, threads are deeply bound, but ThreadPoolExecutor keeps GPU memory in a single process to avoid PyTorch multiprocessing CUDA sharing errors
+    # For CPU, multiprocessing would be better, but given it runs fast on GPU, we use simple threads for I/O bound masking.
+    workers = 4 # Default standard concurrent workers
+    print(f"Starting parallel batch conversion with {workers} concurrent workers...")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        # Map tasks
+        results = executor.map(process_row, enumerate(rows, start=1))
+
+        # Process results as they finish
+        for is_success, msg in results:
+            print(msg)
+            if is_success:
+                success += 1
+            else:
+                fails += 1
 
     t_total_batch = time.perf_counter() - t_start_batch
     t_avg_batch = t_total_batch / total_videos if total_videos > 0 else 0
