@@ -74,8 +74,9 @@ def run_training(
     output_path.mkdir(parents=True, exist_ok=True)
 
     if backbone == 'facenet':
+        import torchvision.transforms.functional as F
         transform = T.Compose([
-            T.Resize((160, 160)),
+            T.Lambda(lambda x: F.resize(x, [160, 160], antialias=True)),
             # If tensor is 1-channel, repeat to 3 channels along dim 0
             T.Lambda(lambda x: x.repeat(3, 1, 1) if x.shape[0] == 1 else x)
         ])
