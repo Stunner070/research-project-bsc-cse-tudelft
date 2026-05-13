@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F_nn
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
 from torch.optim import Adam
@@ -58,6 +59,16 @@ def extract_embeddings(model, dataloader, device):
         return torch.empty(0), torch.empty(0)
     return torch.cat(all_features, 0), torch.cat(all_labels, 0)
 
+class FaceNetTransform:
+    def __call__(self, x):
+        import torch.nn.functional as F_nn
+        # Resize to 160x160
+        x = F_nn.interpolate(x.unsqueeze(0), size=(160, 160), mode='bilinear', align_corners=False).squeeze(0)
+        # If tensor is 1-channel, repeat to 3 channels along dim 0
+        if x.shape[0] == 1:
+            x = x.repeat(3, 1, 1)
+        return x
+
 def run_training(
     train_csv: Path,
     val_csv: Path,
@@ -74,12 +85,7 @@ def run_training(
     output_path.mkdir(parents=True, exist_ok=True)
 
     if backbone == 'facenet':
-        import torchvision.transforms.functional as F
-        transform = T.Compose([
-            T.Lambda(lambda x: F.resize(x, [160, 160], antialias=True)),
-            # If tensor is 1-channel, repeat to 3 channels along dim 0
-            T.Lambda(lambda x: x.repeat(3, 1, 1) if x.shape[0] == 1 else x)
-        ])
+        transform = FaceNetTransform()
     else:
         transform = None
 
