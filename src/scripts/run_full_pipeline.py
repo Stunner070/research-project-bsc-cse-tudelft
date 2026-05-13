@@ -18,8 +18,9 @@ def main():
     parser.add_argument("--epochs", type=int, default=config.DEFAULT_EPOCHS, help="Number of training epochs.")
     parser.add_argument("--batch_size", type=int, default=config.DEFAULT_BATCH_SIZE, help="Batch size for training.")
     parser.add_argument("--num_workers", type=int, default=config.DEFAULT_NUM_WORKERS, help="Number of dataloader workers.")
-    parser.add_argument("--mode", type=str, choices=["all", "event_frames_only", "dvs_only"], default="all", help="Execution mode.")
+    parser.add_argument("--mode", type=str, choices=["all", "event_frames_only", "dvs_only", "train_only"], default="all", help="Execution mode.")
     parser.add_argument("--device", type=str, choices=["auto", "cpu", "cuda"], default="auto", help="Device to use for training.")
+    parser.add_argument("--backbone", type=str, choices=["resnet50", "facenet"], default="resnet50", help="Model backbone to use.")
     parser.add_argument("--max_samples", type=int, default=None, help="Limit number of manifest samples to process.")
     parser.add_argument("--force_conversion", action="store_true", help="Force overwrite of existing converted event arrays.")
     args = parser.parse_args()
@@ -47,8 +48,13 @@ def main():
     # Ensure directories exist
     config.MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
     config.FRAMES_ROOT.mkdir(parents=True, exist_ok=True)
-    config.MODELS_EVENT_FRAMES.mkdir(parents=True, exist_ok=True)
-    config.MODELS_DVS_AVI.mkdir(parents=True, exist_ok=True)
+
+    # Isolate training outputs by backbone
+    current_models_event_frames = config.MODELS_EVENT_FRAMES / args.backbone
+    current_models_dvs_avi = config.MODELS_DVS_AVI / args.backbone
+
+    current_models_event_frames.mkdir(parents=True, exist_ok=True)
+    current_models_dvs_avi.mkdir(parents=True, exist_ok=True)
     config.SPLITS_DIR.mkdir(parents=True, exist_ok=True)
 
     manifest_path = config.MANIFEST_DIR / "manifest.csv"
@@ -108,16 +114,33 @@ def main():
             val_csv=val_csv,
             mode="event_frames",
             frames_root=config.FRAMES_ROOT,
-            output_dir=config.MODELS_EVENT_FRAMES,
+            output_dir=current_models_event_frames,
             epochs=args.epochs,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
-            device_arg=args.device
+            device_arg=args.device,
+            backbone=args.backbone
+        )
+    elif args.mode == "train_only":
+        print("\n====================================")
+        print("Step 3: Training on Event-Frames (train_only mode)")
+        print("====================================")
+        run_training(
+            train_csv=train_csv,
+            val_csv=val_csv,
+            mode="event_frames",
+            frames_root=config.FRAMES_ROOT,
+            output_dir=current_models_event_frames,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            device_arg=args.device,
+            backbone=args.backbone
         )
     else:
         print("\nSkipping Event-Frame Conversion and Training (mode is set to 'dvs_only').")
 
-    if args.mode in ["all", "dvs_only"]:
+    if args.mode in ["all", "dvs_only", "train_only"]:
         print("\n====================================")
         print("Step 4: Training on dvs.avi (Grayscale)")
         print("====================================")
@@ -126,11 +149,12 @@ def main():
             val_csv=val_csv,
             mode="dvs_avi",
             frames_root=None,
-            output_dir=config.MODELS_DVS_AVI,
+            output_dir=current_models_dvs_avi,
             epochs=args.epochs,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
-            device_arg=args.device
+            device_arg=args.device,
+            backbone=args.backbone
         )
     else:
         print("\nSkipping dvs.avi Training (mode is set to 'event_frames_only').")
@@ -140,4 +164,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

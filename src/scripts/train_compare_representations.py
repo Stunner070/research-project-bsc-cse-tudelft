@@ -5,12 +5,15 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision.transforms as T
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 import torchvision.models as models
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from src.datasets.event_video_dataset import EventVideoDataset
 from src.utils.metrics import evaluate_reid
+from src.models.model_factory import build_reid_model
+
 def get_device(device_arg: str = 'auto') -> torch.device:
     if device_arg == 'cpu':
         return torch.device('cpu')
@@ -54,6 +57,7 @@ def extract_embeddings(model, dataloader, device):
     if not all_features:
         return torch.empty(0), torch.empty(0)
     return torch.cat(all_features, 0), torch.cat(all_labels, 0)
+
 def run_training(
     train_csv: Path,
     val_csv: Path,
@@ -63,23 +67,39 @@ def run_training(
     epochs: int,
     batch_size: int,
     num_workers: int,
-    device_arg: str = 'auto'
+    device_arg: str = 'auto',
+    backbone: str = 'resnet50'
 ) -> None:
     output_path = output_dir.resolve()
     output_path.mkdir(parents=True, exist_ok=True)
-    train_dataset = EventVideoDataset(manifest_csv=str(train_csv), mode=mode, frames_root=str(frames_root) if frames_root else None)
+
+    if backbone == 'facenet':
+        transform = T.Compose([
+            T.Resize((160, 160)),
+            # If tensor is 1-channel, repeat to 3 channels along dim 0
+            T.Lambda(lambda x: x.repeat(3, 1, 1) if x.shape[0] == 1 else x)
+        ])
+    else:
+        transform = None
+
+    train_dataset = EventVideoDataset(manifest_csv=str(train_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, transform=transform)
     id_to_int = train_dataset.id_to_int
     num_classes = len(id_to_int)
-    val_dataset = EventVideoDataset(manifest_csv=str(val_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int)
+    val_dataset = EventVideoDataset(manifest_csv=str(val_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform)
     print(f'[{mode.upper()}] Datasets loaded. Train: {len(train_dataset)}, Val: {len(val_dataset)}. Train IDs: {num_classes}')
     device = get_device(device_arg)
+
+    print(f'[{mode.upper()}] Initializing {backbone} backbone...')
+    model = build_reid_model(backbone, num_classes).to(device)
+    print(f'[{mode.upper()}] Backbone: {backbone} | Embedding Dim: {model.embed_dim} | Input Size: {"160x160" if backbone=="facenet" else "Original"}')
     print(f'Using device: {device}')
+
     if len(train_dataset) == 0:
         print('Cannot train, train set empty.')
         return
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    model = ReidBaseline(num_classes).to(device)
+
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = Adam(model.parameters(), lr=1e-3)
     best_mAP = 0.0
@@ -119,9 +139,10 @@ def run_training(
         })
         if mAP >= best_mAP and len(features) > 1:
             best_mAP = mAP
-            torch.save({'model_state': model.state_dict(), 'epoch': epoch}, output_path / f'resnet50_best_{mode}.pt')
-    with open(output_path / f'training_log_{mode}.json', 'w', encoding='utf-8') as f:
+            torch.save({'model_state': model.state_dict(), 'epoch': epoch}, output_path / f'{backbone}_best_{mode}.pt')
+    with open(output_path / f'training_log_{mode}_{backbone}.json', 'w', encoding='utf-8') as f:
         json.dump({'mode': mode, 'best_val_mAP': float(best_mAP), 'history': logs}, f, indent=4)
     print(f'[{mode.upper()}] Training complete. Best mAP: {best_mAP:.4f}')
+
 if __name__ == '__main__':
     pass
