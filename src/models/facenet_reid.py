@@ -14,7 +14,7 @@ class FaceNetReID(nn.Module):
             # Initialize without downloading, then load weights manually
             self.backbone = InceptionResnetV1(pretrained=None, classify=False)
             state_dict = torch.load(local_weights_path, map_location='cpu', weights_only=True)
-            self.backbone.load_state_dict(state_dict)
+            self.backbone.load_state_dict(state_dict, strict=False)
             print(f"Loaded Offline FaceNet Weights from: {local_weights_path}")
         else:
             # Fallback to online download
