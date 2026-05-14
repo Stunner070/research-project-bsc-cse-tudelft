@@ -9,4 +9,4 @@
 
 . /scratch/sofyanali/.venv/bin/activate
 
-srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode train_only --backbone facenet
+srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode event_frames_only --backbone facenet

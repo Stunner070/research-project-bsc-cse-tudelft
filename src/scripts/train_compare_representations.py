@@ -139,7 +139,13 @@ def run_training(
 
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = Adam(model.parameters(), lr=1e-3)
-    best_mAP = 0.0
+    
+    best_mAP = -1.0
+    best_val_rank1 = -1.0
+    best_train_loss = float('inf')
+    best_epoch = -1
+    best_model_info = {}
+    
     logs = []
     for epoch in range(1, epochs + 1):
         model.train()
@@ -212,12 +218,112 @@ def run_training(
             log_entry['test_asr'] = float(test_asr)
         logs.append(log_entry)
 
-        if val_mAP >= best_mAP and len(val_q_features) > 0:
+        # Best-model selection based on validation metrics
+        is_best = False
+        if len(val_q_features) > 0:
+            if val_mAP > best_mAP:
+                is_best = True
+            elif val_mAP == best_mAP:
+                if val_rank1 > best_val_rank1:
+                    is_best = True
+                elif val_rank1 == best_val_rank1:
+                    if avg_train_loss < best_train_loss:
+                        is_best = True
+                        
+        if is_best:
             best_mAP = val_mAP
-            torch.save({'model_state': model.state_dict(), 'epoch': epoch}, output_path / f'{backbone}_best_{mode}.pt')
+            best_val_rank1 = val_rank1
+            best_train_loss = avg_train_loss
+            best_epoch = epoch
+            best_model_info = {
+                'epoch': best_epoch,
+                'val_mAP': float(val_mAP),
+                'val_rank1': float(val_rank1),
+                'test_mAP': float(test_mAP),
+                'test_rank1': float(test_rank1),
+                'checkpoint_path': str(output_path / f'{backbone}_best_{mode}.pt')
+            }
+            if test_query_attacked_loader is not None:
+                best_model_info['test_asr'] = float(test_asr)
+            torch.save({'model_state': model.state_dict(), 'epoch': epoch}, best_model_info['checkpoint_path'])
+
+    # Save full training history
     with open(output_path / f'training_log_{mode}_{backbone}.json', 'w', encoding='utf-8') as f:
         json.dump({'mode': mode, 'best_val_mAP': float(best_mAP), 'history': logs}, f, indent=4)
-    print(f'[{mode.upper()}] Training complete. Best mAP: {best_mAP:.4f}')
+        
+    # Calculate averages
+    if len(logs) > 0:
+        avg_train_loss_all = sum(l['train_loss'] for l in logs) / len(logs)
+        avg_train_acc_all = sum(l['train_acc'] for l in logs) / len(logs)
+        avg_val_r1_all = sum(l['val_rank1'] for l in logs) / len(logs)
+        avg_val_map_all = sum(l['val_mAP'] for l in logs) / len(logs)
+        avg_test_r1_all = sum(l['test_rank1'] for l in logs) / len(logs)
+        avg_test_map_all = sum(l['test_mAP'] for l in logs) / len(logs)
+    else:
+        avg_train_loss_all = avg_train_acc_all = avg_val_r1_all = avg_val_map_all = avg_test_r1_all = avg_test_map_all = 0.0
+
+    last_log = logs[-1] if logs else {}
+
+    print(f"\n==================================================")
+    print(f"FINAL TRAINING SUMMARY [{mode.upper()} - {backbone}]")
+    print(f"==================================================")
+    print(f"Total epochs run: {epochs}")
+    print(f"Best epoch (by Val mAP): {best_epoch}")
+    if best_model_info:
+        print(f"Best checkpoint: {best_model_info['checkpoint_path']}")
+        print(f"\nBest validation metrics:")
+        print(f"- Val Rank-1: {best_model_info['val_rank1']:.4f}")
+        print(f"- Val mAP: {best_model_info['val_mAP']:.4f}")
+        print(f"\nFinal reported test metrics from best checkpoint:")
+        print(f"- Test Rank-1: {best_model_info['test_rank1']:.4f}")
+        print(f"- Test mAP: {best_model_info['test_mAP']:.4f}")
+        if 'test_asr' in best_model_info:
+            print(f"- Test ASR: {best_model_info['test_asr']:.2f}%")
+    else:
+        print("No valid validation evaluation occurred.")
+
+    if logs:
+        print(f"\nLast epoch metrics:")
+        print(f"- Epoch: {last_log.get('epoch', epochs)}")
+        print(f"- Train Loss: {last_log.get('train_loss', 0):.4f}")
+        print(f"- Train Acc: {last_log.get('train_acc', 0):.4f}")
+        print(f"- Val Rank-1: {last_log.get('val_rank1', 0):.4f}")
+        print(f"- Val mAP: {last_log.get('val_mAP', 0):.4f}")
+        print(f"- Test Rank-1: {last_log.get('test_rank1', 0):.4f}")
+        print(f"- Test mAP: {last_log.get('test_mAP', 0):.4f}")
+    print(f"==================================================")
+
+    # Save final summary JSON
+    final_summary_data = {
+        'mode': mode,
+        'backbone': backbone,
+        'total_epochs': epochs,
+        'selection_metric': 'val_mAP (primary), val_rank1, train_loss',
+        'best_epoch': best_epoch,
+        'best_checkpoint_path': best_model_info.get('checkpoint_path', ''),
+        'best_val_r1': best_model_info.get('val_rank1', 0.0),
+        'best_val_map': best_model_info.get('val_mAP', 0.0),
+        'best_test_r1': best_model_info.get('test_rank1', 0.0),
+        'best_test_map': best_model_info.get('test_mAP', 0.0),
+        'best_test_asr': best_model_info.get('test_asr', 0.0),
+        'last_epoch': last_log.get('epoch', epochs),
+        'last_train_loss': last_log.get('train_loss', 0.0),
+        'last_train_acc': last_log.get('train_acc', 0.0),
+        'last_val_r1': last_log.get('val_rank1', 0.0),
+        'last_val_map': last_log.get('val_mAP', 0.0),
+        'last_test_r1': last_log.get('test_rank1', 0.0),
+        'last_test_map': last_log.get('test_mAP', 0.0),
+        'average_metrics': {
+            'train_loss': float(avg_train_loss_all),
+            'train_acc': float(avg_train_acc_all),
+            'val_r1': float(avg_val_r1_all),
+            'val_map': float(avg_val_map_all),
+            'test_r1': float(avg_test_r1_all),
+            'test_map': float(avg_test_map_all)
+        }
+    }
+    with open(output_path / f'final_summary_{mode}_{backbone}.json', 'w', encoding='utf-8') as f:
+        json.dump(final_summary_data, f, indent=4)
 
 if __name__ == '__main__':
     pass
