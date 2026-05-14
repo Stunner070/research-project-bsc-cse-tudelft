@@ -22,7 +22,9 @@ def main():
     parser.add_argument("--device", type=str, choices=["auto", "cpu", "cuda"], default="auto", help="Device to use for training.")
     parser.add_argument("--backbone", type=str, choices=["resnet50", "facenet"], default="resnet50", help="Model backbone to use.")
     parser.add_argument("--max_samples", type=int, default=None, help="Limit number of manifest samples to process.")
+    parser.add_argument("--min_clips", type=int, default=2, help="Minimum number of clips per identity required to keep it.")
     parser.add_argument("--force_conversion", action="store_true", help="Force overwrite of existing converted event arrays.")
+    parser.add_argument("--frames_root_attacked", type=str, default=None, help="Path to attacked frames root for testing ASR.")
     args = parser.parse_args()
 
     # GPU Check
@@ -73,14 +75,16 @@ def main():
         config.CELEBVHQ_INFO_JSON,
         manifest_enriched,
         config.SPLITS_DIR,
-        id_column="ytb_id"
+        id_column="ytb_id",
+        min_clips_per_identity=args.min_clips
     )
 
     train_csv = config.SPLITS_DIR / "train.csv"
     val_csv = config.SPLITS_DIR / "val.csv"
+    test_csv = config.SPLITS_DIR / "test.csv"
 
     # Safety check
-    if not train_csv.exists() or not val_csv.exists():
+    if not train_csv.exists() or not val_csv.exists() or not test_csv.exists():
         print("No valid split can be formed (maybe not enough data?)")
         return
 
@@ -112,6 +116,7 @@ def main():
         run_training(
             train_csv=train_csv,
             val_csv=val_csv,
+            test_csv=test_csv,
             mode="event_frames",
             frames_root=config.FRAMES_ROOT,
             output_dir=current_models_event_frames,
@@ -119,7 +124,8 @@ def main():
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             device_arg=args.device,
-            backbone=args.backbone
+            backbone=args.backbone,
+            frames_root_attacked=Path(args.frames_root_attacked) if args.frames_root_attacked else None
         )
     elif args.mode == "train_only":
         print("\n====================================")
@@ -128,6 +134,7 @@ def main():
         run_training(
             train_csv=train_csv,
             val_csv=val_csv,
+            test_csv=test_csv,
             mode="event_frames",
             frames_root=config.FRAMES_ROOT,
             output_dir=current_models_event_frames,
@@ -135,7 +142,8 @@ def main():
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             device_arg=args.device,
-            backbone=args.backbone
+            backbone=args.backbone,
+            frames_root_attacked=Path(args.frames_root_attacked) if args.frames_root_attacked else None
         )
     else:
         print("\nSkipping Event-Frame Conversion and Training (mode is set to 'dvs_only').")
@@ -147,6 +155,7 @@ def main():
         run_training(
             train_csv=train_csv,
             val_csv=val_csv,
+            test_csv=test_csv,
             mode="dvs_avi",
             frames_root=None,
             output_dir=current_models_dvs_avi,

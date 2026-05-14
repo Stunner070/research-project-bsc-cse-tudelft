@@ -8,6 +8,6 @@
 #SBATCH --mem-per-cpu=1GB
 #SBATCH --time=01:10:00
 
-srun source ~/projects/.venv/bin/activate
+. /scratch/sofyanali/.venv/bin/activate
 
-srun python ~/projects/rpbsc/src/scripts/run_full_pipeline.py --mode all  --device cuda
+srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode all  --device cuda

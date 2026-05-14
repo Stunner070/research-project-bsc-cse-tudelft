@@ -13,7 +13,9 @@ def build_splits(
     json_path: Path,
     output_enriched: Path,
     splits_dir: Path,
-    id_column: str = "ytb_id"
+    id_column: str = "ytb_id",
+    min_clips_per_identity: int = 2,
+    seed: int = 42
 ):
     print(f"Reading manifest from {manifest_csv}")
     df = pd.read_csv(manifest_csv)
@@ -69,25 +71,90 @@ def build_splits(
 
     df['identity'] = df[id_column]
 
-    unique_ids = df['identity'].unique()
-    np.random.seed(42)
+    # Analyze Clips per Identity
+    counts = df['identity'].value_counts()
+    identities_gt_1 = (counts >= 1).sum()
+    identities_gt_2 = (counts >= 2).sum()
+    identities_gt_3 = (counts >= 3).sum()
+    identities_gt_4 = (counts >= 4).sum()
+
+    print("\n--- Identity/Clip Distribution ---")
+    print(f"Total initial samples: {len(df)}")
+    print(f"Total initial identities: {len(counts)}")
+    print(f"Identities with >=1 clips: {identities_gt_1}")
+    print(f"Identities with >=2 clips: {identities_gt_2}")
+    print(f"Identities with >=3 clips: {identities_gt_3}")
+    print(f"Identities with >=4 clips: {identities_gt_4}")
+
+    # Filter out identities with < min_clips_per_identity
+    valid_identities = counts[counts >= min_clips_per_identity].index.tolist()
+    initial_sample_count = len(df)
+    initial_id_count = len(counts)
+
+    df = df[df['identity'].isin(valid_identities)].copy()
+
+    retained_sample_count = len(df)
+    retained_id_count = len(valid_identities)
+
+    print(f"\nFiltering identities with < {min_clips_per_identity} clips...")
+    print(f"Removed {initial_id_count - retained_id_count} identities.")
+    print(f"Removed {initial_sample_count - retained_sample_count} samples.")
+    print(f"Retained {retained_sample_count} samples across {retained_id_count} identities.\n")
+
+    unique_ids = list(df['identity'].unique())
+    np.random.seed(seed)
     np.random.shuffle(unique_ids)
 
     n_ids = len(unique_ids)
-    n_train = max(1, int(0.7 * n_ids))
-    n_val = max(0, int(0.15 * n_ids))
+    n_train = int(0.7 * n_ids)
+    n_val = int(0.15 * n_ids)
+    n_test = n_ids - n_train - n_val
+
+    # Safety Fallbacks for very small datasets
+    if n_val == 0 and n_ids >= 2:
+        n_val = 1
+        n_train -= 1
+    if n_test == 0 and n_ids >= 3:
+        n_test = 1
+        n_train -= 1
 
     train_ids = unique_ids[:n_train]
     val_ids = unique_ids[n_train:n_train+n_val]
     test_ids = unique_ids[n_train+n_val:]
 
-    if len(val_ids) == 0 and n_ids > 1:
-        val_ids = test_ids
-        test_ids = []
+    # Assertions
+    assert len(set(train_ids) & set(val_ids)) == 0, "Train and Val identity sets overlap!"
+    assert len(set(train_ids) & set(test_ids)) == 0, "Train and Test identity sets overlap!"
+    assert len(set(val_ids) & set(test_ids)) == 0, "Val and Test identity sets overlap!"
 
     train_df = df[df['identity'].isin(train_ids)]
     val_df = df[df['identity'].isin(val_ids)]
     test_df = df[df['identity'].isin(test_ids)]
+
+    # Assign Query / Gallery roles
+    def assign_roles(split_df):
+        if split_df.empty: return split_df
+        split_df = split_df.copy()
+        split_df['role'] = 'gallery'
+        
+        # Pick 1 random query per identity
+        np.random.seed(seed)
+        query_indices = []
+        for _, group in split_df.groupby('identity'):
+            query_indices.append(np.random.choice(group.index))
+            
+        split_df.loc[query_indices, 'role'] = 'query'
+        return split_df
+
+    train_df = train_df.copy()
+    train_df['role'] = 'train'
+    val_df = assign_roles(val_df)
+    test_df = assign_roles(test_df)
+
+    assert len(train_df) + len(val_df) + len(test_df) == len(df), "Not all samples are allocated exactly once!"
+
+    # Combine back to df for output_enriched
+    df = pd.concat([train_df, val_df, test_df], ignore_index=True)
 
     output_enriched.parent.mkdir(parents=True, exist_ok=True)
     splits_dir.mkdir(parents=True, exist_ok=True)
@@ -98,12 +165,15 @@ def build_splits(
     if not val_df.empty: val_df.to_csv(splits_dir / "val.csv", index=False)
     if not test_df.empty: test_df.to_csv(splits_dir / "test.csv", index=False)
 
-    print(f"Total samples: {len(df)}")
-    print(f"Total identities: {len(unique_ids)}")
+    print("--- Final Split Summary ---")
     print(f"Identity source used: {id_column}")
-    print(f"Train: {len(train_df)} samples, {len(train_ids)} identities")
-    print(f"Val: {len(val_df)} samples, {len(val_ids)} identities")
-    print(f"Test: {len(test_df)} samples, {len(test_ids)} identities")
+    print(f"Min clips per identity: {min_clips_per_identity}")
+    print(f"Total retained samples: {len(df)}")
+    print(f"Total retained identities: {len(unique_ids)}")
+    print(f"Train: {len(train_df):>5} samples, {len(train_ids):>5} identities")
+    print(f"Val:   {len(val_df):>5} samples, {len(val_ids):>5} identities")
+    print(f"Test:  {len(test_df):>5} samples, {len(test_ids):>5} identities")
+    print("Confirmed: Identity sets are strictly disjoint.\n")
 
     return int(len(df))
 
@@ -114,6 +184,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_enriched", type=str, required=True)
     parser.add_argument("--splits_dir", type=str, required=True)
     parser.add_argument("--id_column", type=str, default="ytb_id")
+    parser.add_argument("--min_clips_per_identity", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     build_splits(
@@ -121,5 +193,7 @@ if __name__ == "__main__":
         Path(args.json_path),
         Path(args.output_enriched),
         Path(args.splits_dir),
-        args.id_column
+        args.id_column,
+        args.min_clips_per_identity,
+        args.seed
     )

@@ -6,13 +6,18 @@ from torch.utils.data import Dataset
 from pathlib import Path
 
 class EventVideoDataset(Dataset):
-    def __init__(self, manifest_csv, mode="event_frames", frames_root=None, transform=None, max_frames=None, id_to_int=None):
+    def __init__(self, manifest_csv, mode="event_frames", frames_root=None, transform=None, max_frames=None, id_to_int=None, role=None, frames_root_attacked=None, is_attacked=False):
         self.mode = mode
         self.frames_root = Path(frames_root) if frames_root else None
+        self.frames_root_attacked = Path(frames_root_attacked) if frames_root_attacked else None
+        self.is_attacked = is_attacked
         self.transform = transform
         self.max_frames = max_frames
 
         self.df = pd.read_csv(manifest_csv)
+
+        if role is not None:
+            self.df = self.df[self.df['role'] == role].copy()
 
         # Build mapping from identity_id to integer label if not provided
         id_col = 'identity' if 'identity' in self.df.columns else ('identity_id' if 'identity_id' in self.df.columns else 'video_id')
@@ -25,7 +30,7 @@ class EventVideoDataset(Dataset):
                 self.df = self.df[exists]
 
         if len(self.df) == 0:
-            raise ValueError(f"No valid samples remaining in {manifest_csv}")
+            raise ValueError(f"No valid samples remaining in {manifest_csv} for role {role}")
 
         unique_ids = self.df[id_col].unique()
         if id_to_int is None:
@@ -43,7 +48,8 @@ class EventVideoDataset(Dataset):
         label = self.id_to_int.get(row[self.id_col], -1)
 
         if self.mode == "event_frames":
-            npy_path = self.frames_root / video_id / "event_frames.npy"
+            root = self.frames_root_attacked if self.is_attacked else self.frames_root
+            npy_path = root / video_id / "event_frames.npy"
 
             with open(npy_path, 'rb') as f:
                 version = np.lib.format.read_magic(f)

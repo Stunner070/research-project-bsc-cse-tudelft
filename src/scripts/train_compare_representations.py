@@ -12,7 +12,7 @@ from torch.optim import Adam
 import torchvision.models as models
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from src.datasets.event_video_dataset import EventVideoDataset
-from src.utils.metrics import evaluate_reid
+from src.utils.metrics import evaluate_reid, evaluate_query_gallery
 from src.models.model_factory import build_reid_model
 
 def get_device(device_arg: str = 'auto') -> torch.device:
@@ -72,6 +72,7 @@ class FaceNetTransform:
 def run_training(
     train_csv: Path,
     val_csv: Path,
+    test_csv: Path,
     mode: str,
     frames_root: Path | None,
     output_dir: Path,
@@ -79,7 +80,8 @@ def run_training(
     batch_size: int,
     num_workers: int,
     device_arg: str = 'auto',
-    backbone: str = 'resnet50'
+    backbone: str = 'resnet50',
+    frames_root_attacked: Path | None = None
 ) -> None:
     output_path = output_dir.resolve()
     output_path.mkdir(parents=True, exist_ok=True)
@@ -92,8 +94,29 @@ def run_training(
     train_dataset = EventVideoDataset(manifest_csv=str(train_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, transform=transform)
     id_to_int = train_dataset.id_to_int
     num_classes = len(id_to_int)
-    val_dataset = EventVideoDataset(manifest_csv=str(val_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform)
-    print(f'[{mode.upper()}] Datasets loaded. Train: {len(train_dataset)}, Val: {len(val_dataset)}. Train IDs: {num_classes}')
+    
+    # Load Query and Gallery sets for Val
+    val_query_dataset = EventVideoDataset(manifest_csv=str(val_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform, role='query')
+    val_gallery_dataset = EventVideoDataset(manifest_csv=str(val_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform, role='gallery')
+    
+    # Load Query and Gallery sets for Test (Clean)
+    test_query_dataset = EventVideoDataset(manifest_csv=str(test_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform, role='query')
+    test_gallery_dataset = EventVideoDataset(manifest_csv=str(test_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, id_to_int=id_to_int, transform=transform, role='gallery')
+
+    # Load Attacked Test Query if provided
+    test_query_attacked_dataset = None
+    if frames_root_attacked is not None and mode == "event_frames":
+        try:
+            test_query_attacked_dataset = EventVideoDataset(manifest_csv=str(test_csv), mode=mode, frames_root=str(frames_root) if frames_root else None, frames_root_attacked=str(frames_root_attacked), is_attacked=True, id_to_int=id_to_int, transform=transform, role='query')
+        except ValueError:
+            print("Warning: Could not load attacked test queries.")
+
+    print(f'[{mode.upper()}] Datasets loaded. Train: {len(train_dataset)}, Val Query: {len(val_query_dataset)}, Val Gallery: {len(val_gallery_dataset)}')
+    print(f'[{mode.upper()}] Test Query: {len(test_query_dataset)}, Test Gallery: {len(test_gallery_dataset)}')
+    if test_query_attacked_dataset:
+        print(f'[{mode.upper()}] Test Query (Attacked): {len(test_query_attacked_dataset)}')
+    print(f'[{mode.upper()}] Train IDs: {num_classes}')
+
     device = get_device(device_arg)
 
     print(f'[{mode.upper()}] Initializing {backbone} backbone...')
@@ -105,7 +128,14 @@ def run_training(
         print('Cannot train, train set empty.')
         return
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    val_query_loader = DataLoader(val_query_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    val_gallery_loader = DataLoader(val_gallery_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    test_query_loader = DataLoader(test_query_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    test_gallery_loader = DataLoader(test_gallery_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    
+    test_query_attacked_loader = None
+    if test_query_attacked_dataset:
+         test_query_attacked_loader = DataLoader(test_query_attacked_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = Adam(model.parameters(), lr=1e-3)
@@ -130,22 +160,60 @@ def run_training(
             train_correct += predicted.eq(labels).sum().item()
         avg_train_loss = train_loss / train_total if train_total > 0 else 0.0
         train_acc = train_correct / train_total if train_total > 0 else 0.0
+
         print(f'[{mode.upper()}] Extracting validation features...')
-        features, labels = extract_embeddings(model, val_loader, device)
-        if len(features) > 1:
-            rank1, mAP = evaluate_reid(features, labels, features, labels)
+        val_q_features, val_q_labels = extract_embeddings(model, val_query_loader, device)
+        val_g_features, val_g_labels = extract_embeddings(model, val_gallery_loader, device)
+        
+        if len(val_q_features) > 0 and len(val_g_features) > 0:
+            val_rank1, val_mAP, _ = evaluate_query_gallery(val_q_features, val_q_labels, val_g_features, val_g_labels)
         else:
-            rank1, mAP = 0.0, 0.0
-        print(f'[{mode.upper()}] Epoch [{epoch}/{epochs}] | Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.4f} | Val R1: {rank1:.4f} | Val mAP: {mAP:.4f}')
-        logs.append({
+            val_rank1, val_mAP = 0.0, 0.0
+
+        print(f'[{mode.upper()}] Extracting test features...')
+        test_q_features, test_q_labels = extract_embeddings(model, test_query_loader, device)
+        test_g_features, test_g_labels = extract_embeddings(model, test_gallery_loader, device)
+        
+        test_asr = 0.0
+        if len(test_q_features) > 0 and len(test_g_features) > 0:
+            test_rank1, test_mAP, test_top1_correct = evaluate_query_gallery(test_q_features, test_q_labels, test_g_features, test_g_labels)
+            
+            # Evaluate ASR
+            if test_query_attacked_loader is not None:
+                print(f'[{mode.upper()}] Extracting attacked test features...')
+                test_qa_features, test_qa_labels = extract_embeddings(model, test_query_attacked_loader, device)
+                if len(test_qa_features) > 0:
+                    _, _, test_attacked_top1_correct = evaluate_query_gallery(test_qa_features, test_qa_labels, test_g_features, test_g_labels)
+                    
+                    # ASR: % of successfully attacked queries among originally correct queries
+                    # "mathematically checking clean Rank-1 != attacked Rank-1" meaning previously correct, now wrong.
+                    originally_correct = test_top1_correct.sum()
+                    if originally_correct > 0:
+                        success_attacks = (test_top1_correct & ~test_attacked_top1_correct).sum()
+                        test_asr = success_attacks / originally_correct * 100.0
+        else:
+            test_rank1, test_mAP = 0.0, 0.0
+
+        if test_query_attacked_loader is not None:
+            print(f'[{mode.upper()}] Epoch [{epoch}/{epochs}] | Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.4f} | Val R1: {val_rank1:.4f} | Val mAP: {val_mAP:.4f} | Test R1: {test_rank1:.4f} | Test mAP: {test_mAP:.4f} | Test ASR: {test_asr:.2f}%')
+        else:
+            print(f'[{mode.upper()}] Epoch [{epoch}/{epochs}] | Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.4f} | Val R1: {val_rank1:.4f} | Val mAP: {val_mAP:.4f} | Test R1: {test_rank1:.4f} | Test mAP: {test_mAP:.4f}')
+
+        log_entry = {
             'epoch': epoch,
             'train_loss': avg_train_loss,
             'train_acc': train_acc,
-            'val_rank1': float(rank1),
-            'val_mAP': float(mAP)
-        })
-        if mAP >= best_mAP and len(features) > 1:
-            best_mAP = mAP
+            'val_rank1': float(val_rank1),
+            'val_mAP': float(val_mAP),
+            'test_rank1': float(test_rank1),
+            'test_mAP': float(test_mAP)
+        }
+        if test_query_attacked_loader is not None:
+            log_entry['test_asr'] = float(test_asr)
+        logs.append(log_entry)
+
+        if val_mAP >= best_mAP and len(val_q_features) > 0:
+            best_mAP = val_mAP
             torch.save({'model_state': model.state_dict(), 'epoch': epoch}, output_path / f'{backbone}_best_{mode}.pt')
     with open(output_path / f'training_log_{mode}_{backbone}.json', 'w', encoding='utf-8') as f:
         json.dump({'mode': mode, 'best_val_mAP': float(best_mAP), 'history': logs}, f, indent=4)
