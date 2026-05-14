@@ -8,7 +8,7 @@ V2E_ROOT = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346/")
 # V2E_ROOT = Path("C:/Users/sofya/Desktop/event_videos/346x260")
 
 # Root directory for all derived outputs
-WORK_DIR = Path("/scratch/sofyanali/celebvhq/output/")
+WORK_DIR = Path("/scratch/sofyanali/celebvhq/output_20/")
 # WORK_DIR = Path("C:/Users/sofya/Desktop/rp code/output")
 
 # Info json
