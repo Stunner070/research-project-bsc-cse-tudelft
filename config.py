@@ -19,7 +19,7 @@ MANIFEST_DIR = WORK_DIR / "manifests"
 SPLITS_DIR = WORK_DIR / "splits"
 FRAMES_ROOT = WORK_DIR / "frames"
 # MODIFIED_QUERY_DIR = Path("C:/Users/sofya/Desktop/event_videos/346x260")
-MODIFIED_QUERY_DIR = Path("/scratch/sofyanali/celebvhq/first_500_conv/baseline_346/")
+MODIFIED_QUERY_DIR = Path("/projects/rpevents7/celebvhq/first_500_conv/baseline_346/")
 MODELS_EVENT_FRAMES = WORK_DIR / "models" / "event_frames"
 MODELS_DVS_AVI = WORK_DIR / "models" / "dvs_avi"
 
