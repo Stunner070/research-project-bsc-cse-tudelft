@@ -2,6 +2,7 @@
 opencv-python
 Pillow
 albumentations
+scikit-image
 
 # Scientific computing
 numpy
@@ -24,6 +25,9 @@ tensorboard
 imageio
 imageio-ffmpeg
 av
+
+# Privacy & Quality Metrics
+lpips
 
 # Utilities
 einops

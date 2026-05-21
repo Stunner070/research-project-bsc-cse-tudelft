@@ -12,7 +12,7 @@ from torch.optim import Adam
 import torchvision.models as models
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from src.datasets.event_video_dataset import EventVideoDataset
-from src.utils.metrics import evaluate_reid, evaluate_query_gallery
+from src.utils.metrics import evaluate_reid, evaluate_query_gallery, compute_quality_metrics
 from src.models.model_factory import build_reid_model
 
 def get_device(device_arg: str = 'auto') -> torch.device:
@@ -172,7 +172,7 @@ def run_training(
         val_g_features, val_g_labels = extract_embeddings(model, val_gallery_loader, device)
         
         if len(val_q_features) > 0 and len(val_g_features) > 0:
-            val_rank1, val_mAP, _ = evaluate_query_gallery(val_q_features, val_q_labels, val_g_features, val_g_labels)
+            val_rank1, val_mAP, _, _ = evaluate_query_gallery(val_q_features, val_q_labels, val_g_features, val_g_labels)
         else:
             val_rank1, val_mAP = 0.0, 0.0
 
@@ -182,14 +182,14 @@ def run_training(
         
         test_asr = 0.0
         if len(test_q_features) > 0 and len(test_g_features) > 0:
-            test_rank1, test_mAP, test_top1_correct = evaluate_query_gallery(test_q_features, test_q_labels, test_g_features, test_g_labels)
+            test_rank1, test_mAP, test_top1_correct, _ = evaluate_query_gallery(test_q_features, test_q_labels, test_g_features, test_g_labels)
             
             # Evaluate ASR
             if test_query_attacked_loader is not None:
                 print(f'[{mode.upper()}] Extracting attacked test features...')
                 test_qa_features, test_qa_labels = extract_embeddings(model, test_query_attacked_loader, device)
                 if len(test_qa_features) > 0:
-                    _, _, test_attacked_top1_correct = evaluate_query_gallery(test_qa_features, test_qa_labels, test_g_features, test_g_labels)
+                    _, _, test_attacked_top1_correct, _ = evaluate_query_gallery(test_qa_features, test_qa_labels, test_g_features, test_g_labels)
                     
                     # ASR: % of successfully attacked queries among originally correct queries
                     # "mathematically checking clean Rank-1 != attacked Rank-1" meaning previously correct, now wrong.
@@ -324,6 +324,146 @@ def run_training(
     }
     with open(output_path / f'final_summary_{mode}_{backbone}.json', 'w', encoding='utf-8') as f:
         json.dump(final_summary_data, f, indent=4)
+
+def run_privacy_evaluation(
+    checkpoint_path: Path,
+    test_csv: Path,
+    backbone: str,
+    mode: str,
+    frames_root: Path,
+    modified_query_dir: Path,
+    output_dir: Path,
+    device_arg: str = 'auto',
+    batch_size: int = 64,
+    num_workers: int = 4
+) -> None:
+    """
+    Evaluate privacy metrics (SSIM, LPIPS, ASR) on a pre-trained model.
+    """
+    output_path = output_dir.resolve()
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    device = get_device(device_arg)
+    
+    if backbone == 'facenet':
+        transform = FaceNetTransform()
+    else:
+        transform = None
+    
+    # Load test query and gallery (clean)
+    test_query_dataset = EventVideoDataset(manifest_csv=str(test_csv), mode=mode, frames_root=str(frames_root), transform=transform, role='query')
+    test_gallery_dataset = EventVideoDataset(manifest_csv=str(test_csv), mode=mode, frames_root=str(frames_root), transform=transform, role='gallery')
+    id_to_int = test_query_dataset.id_to_int
+    
+    # Load modified test queries
+    modified_query_dataset = None
+    try:
+        modified_root = Path(modified_query_dir)
+        if modified_root.exists():
+            modified_query_dataset = EventVideoDataset(
+                manifest_csv=str(test_csv), 
+                mode=mode, 
+                frames_root=str(modified_query_dir), 
+                id_to_int=id_to_int,
+                transform=transform, 
+                role='query'
+            )
+    except Exception as e:
+        print(f"Warning: Could not load modified test queries: {e}")
+    
+    test_query_loader = DataLoader(test_query_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    test_gallery_loader = DataLoader(test_gallery_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    modified_query_loader = None
+    if modified_query_dataset:
+        modified_query_loader = DataLoader(modified_query_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    
+    # Load model
+    num_classes = len(id_to_int)
+    model = build_reid_model(backbone, num_classes).to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state' in checkpoint:
+        model.load_state_dict(checkpoint['model_state'])
+    else:
+        model.load_state_dict(checkpoint)
+    print(f"[PRIVACY_EVAL] Loaded model from {checkpoint_path}")
+    
+    # Extract embeddings
+    print(f"[PRIVACY_EVAL] Extracting clean test features...")
+    clean_q_features, clean_q_labels = extract_embeddings(model, test_query_loader, device)
+    gallery_features, gallery_labels = extract_embeddings(model, test_gallery_loader, device)
+    
+    # Evaluate clean
+    clean_rank1 = 0.0
+    clean_mAP = 0.0
+    if len(clean_q_features) > 0 and len(gallery_features) > 0:
+        clean_rank1, clean_mAP, clean_top1_correct, _ = evaluate_query_gallery(clean_q_features, clean_q_labels, gallery_features, gallery_labels)
+    
+    # Evaluate modified if available
+    modified_rank1 = 0.0
+    modified_mAP = 0.0
+    privacy_asr = 0.0
+    ssim_results = None
+    lpips_results = None
+    
+    if modified_query_loader:
+        print(f"[PRIVACY_EVAL] Extracting modified test features...")
+        mod_q_features, mod_q_labels = extract_embeddings(model, modified_query_loader, device)
+        
+        if len(mod_q_features) > 0 and len(gallery_features) > 0:
+            modified_rank1, modified_mAP, modified_top1_correct, _ = evaluate_query_gallery(mod_q_features, mod_q_labels, gallery_features, gallery_labels)
+            
+            # Compute privacy ASR
+            if len(clean_top1_correct) == len(modified_top1_correct):
+                originally_correct = clean_top1_correct.sum()
+                if originally_correct > 0:
+                    successful_attacks = (clean_top1_correct & ~modified_top1_correct).sum()
+                    privacy_asr = (successful_attacks / originally_correct) * 100.0
+    
+    # Print final summary
+    print(f"\n{'='*70}")
+    print(f"PRIVACY EVALUATION SUMMARY [{mode.upper()} - {backbone}]")
+    print(f"{'='*70}")
+    print(f"Model checkpoint: {checkpoint_path}\n")
+    
+    print(f"--- CLEAN TEST PERFORMANCE ---")
+    print(f"Test Rank-1 (clean): {clean_rank1*100:.2f}%")
+    print(f"Test mAP (clean):    {clean_mAP:.4f}")
+    
+    if modified_query_loader:
+        print(f"\n--- MODIFIED TEST PERFORMANCE ---")
+        print(f"Test Rank-1 (modified): {modified_rank1*100:.2f}%")
+        print(f"Test mAP (modified):    {modified_mAP:.4f}")
+        print(f"Privacy ASR: {privacy_asr:.2f}%")
+    
+    print(f"{'='*70}\n")
+
+def print_final_summary_table(best_model_info, mode, backbone):
+    """Print a clean final summary table after training."""
+    if not best_model_info:
+        return
+    
+    print(f"\n{'='*70}")
+    print(f"FINAL EVALUATION SUMMARY")
+    print(f"Best checkpoint from Epoch {best_model_info['epoch']}")
+    print(f"{'='*70}")
+    
+    print(f"Model: {backbone.upper()} | Mode: {mode.upper()}")
+    print(f"Best checkpoint: Epoch {best_model_info['epoch']} (Val mAP: {best_model_info['val_mAP']:.4f})")
+    print(f"Checkpoint path: {best_model_info['checkpoint_path']}")
+    
+    print(f"\n--- Identification Metrics ---")
+    print(f"Test Rank-1: {best_model_info['test_rank1']*100:.2f}%")
+    print(f"Test mAP:    {best_model_info['test_mAP']:.4f}")
+    
+    if 'test_asr' in best_model_info and best_model_info['test_asr'] > 0:
+        print(f"\n--- Attack Metrics ---")
+        print(f"Test ASR (attack): {best_model_info['test_asr']:.2f}%")
+    
+    print(f"\n--- Image Quality Metrics ---")
+    print(f"SSIM:  N/A")
+    print(f"LPIPS: N/A")
+    
+    print(f"{'='*70}\n")
 
 if __name__ == '__main__':
     pass

@@ -10,4 +10,4 @@
 
 . /scratch/sofyanali/.venv/bin/activate
 
-srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode all  --device cuda
+srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode all  --device cuda --backbone facenet --privacy_eval

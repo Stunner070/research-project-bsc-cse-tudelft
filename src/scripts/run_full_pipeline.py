@@ -8,7 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from src.scripts.build_manifest import build_manifest
 from src.scripts.build_splits import build_splits
 from src.scripts.batch_convert_events import batch_convert_events
-from src.scripts.train_compare_representations import run_training
+from src.scripts.train_compare_representations import run_training, run_privacy_evaluation
 import config
 import torch
 
@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--min_clips", type=int, default=2, help="Minimum number of clips per identity required to keep it.")
     parser.add_argument("--force_conversion", action="store_true", help="Force overwrite of existing converted event arrays.")
     parser.add_argument("--frames_root_attacked", type=str, default=None, help="Path to attacked frames root for testing ASR.")
+    parser.add_argument("--privacy_eval", action="store_true", help="Run privacy evaluation after training.")
     args = parser.parse_args()
 
     # GPU Check
@@ -127,6 +128,29 @@ def main():
             backbone=args.backbone,
             frames_root_attacked=Path(args.frames_root_attacked) if args.frames_root_attacked else None
         )
+
+        # Run privacy evaluation if requested
+        if args.privacy_eval and config.MODIFIED_QUERY_DIR:
+            print("\n====================================")
+            print("Step 3b: Running Privacy Evaluation")
+            print("====================================")
+            checkpoint_path = current_models_event_frames / f"{args.backbone}_best_event_frames.pt"
+            if checkpoint_path.exists():
+                run_privacy_evaluation(
+                    checkpoint_path=checkpoint_path,
+                    test_csv=test_csv,
+                    backbone=args.backbone,
+                    mode="event_frames",
+                    frames_root=config.FRAMES_ROOT,
+                    modified_query_dir=config.MODIFIED_QUERY_DIR,
+                    output_dir=current_models_event_frames,
+                    device_arg=args.device,
+                    batch_size=args.batch_size,
+                    num_workers=args.num_workers
+                )
+            else:
+                print(f"Warning: Could not find checkpoint at {checkpoint_path}")
+                print("Skipping privacy evaluation.")
     elif args.mode == "train_only":
         print("\n====================================")
         print("Step 3: Training on Event-Frames (train_only mode)")
@@ -145,6 +169,29 @@ def main():
             backbone=args.backbone,
             frames_root_attacked=Path(args.frames_root_attacked) if args.frames_root_attacked else None
         )
+
+        # Run privacy evaluation if requested
+        if args.privacy_eval and config.MODIFIED_QUERY_DIR:
+            print("\n====================================")
+            print("Step 3b: Running Privacy Evaluation")
+            print("====================================")
+            checkpoint_path = current_models_event_frames / f"{args.backbone}_best_event_frames.pt"
+            if checkpoint_path.exists():
+                run_privacy_evaluation(
+                    checkpoint_path=checkpoint_path,
+                    test_csv=test_csv,
+                    backbone=args.backbone,
+                    mode="event_frames",
+                    frames_root=config.FRAMES_ROOT,
+                    modified_query_dir=config.MODIFIED_QUERY_DIR,
+                    output_dir=current_models_event_frames,
+                    device_arg=args.device,
+                    batch_size=args.batch_size,
+                    num_workers=args.num_workers
+                )
+            else:
+                print(f"Warning: Could not find checkpoint at {checkpoint_path}")
+                print("Skipping privacy evaluation.")
     else:
         print("\nSkipping Event-Frame Conversion and Training (mode is set to 'dvs_only').")
 
