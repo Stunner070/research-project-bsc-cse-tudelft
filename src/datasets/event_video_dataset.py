@@ -4,6 +4,11 @@ import cv2
 import torch
 from torch.utils.data import Dataset
 from pathlib import Path
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+import config
+
 
 class EventVideoDataset(Dataset):
     def __init__(self, manifest_csv, mode="event_frames", frames_root=None, transform=None, max_frames=None, id_to_int=None, role=None, frames_root_attacked=None, is_attacked=False):
@@ -22,17 +27,18 @@ class EventVideoDataset(Dataset):
         # Build mapping from identity_id to integer label if not provided
         id_col = 'identity' if 'identity' in self.df.columns else ('identity_id' if 'identity_id' in self.df.columns else 'video_id')
         self.id_col = id_col
-        # Drop missing files
+
+        # Drop missing files for event_frames mode
         if self.mode == "event_frames" and self.frames_root:
             exists = self.df['video_id'].apply(lambda vid: (self.frames_root / vid / "event_frames.npy").exists())
             if not exists.all():
                 print(f"Warning: dropping {sum(~exists)} samples missing event_frames.npy")
-                self.df = self.df[exists]
+                self.df = self.df[exists].copy()
 
         if len(self.df) == 0:
             raise ValueError(f"No valid samples remaining in {manifest_csv} for role {role}")
 
-        unique_ids = self.df[id_col].unique()
+        unique_ids = sorted(self.df[id_col].unique())
         if id_to_int is None:
             self.id_to_int = {identity: i for i, identity in enumerate(unique_ids)}
         else:
@@ -61,13 +67,11 @@ class EventVideoDataset(Dataset):
                 T = shape[0]
 
                 if T == 0:
-                    frame = np.zeros((768, 1024), dtype=np.float32)
+                    # Fallback: use configured event resolution
+                    frame = np.zeros((config.EVENT_HEIGHT, config.EVENT_WIDTH), dtype=np.float32)
                 else:
-                    if self.max_frames is not None and T > self.max_frames:
-                        indices = np.random.choice(T, self.max_frames, replace=False)
-                        t = np.random.choice(indices)
-                    else:
-                        t = np.random.randint(0, T)
+                    # Deterministic middle-frame selection
+                    t = T // 2
 
                     data_offset = f.tell()
                     frame_bytes = np.dtype(dtype).itemsize * shape[1] * shape[2]
@@ -78,6 +82,11 @@ class EventVideoDataset(Dataset):
                         frame = np.zeros((shape[1], shape[2]), dtype=np.float32)
                     else:
                         frame = frame.reshape((shape[1], shape[2]))
+
+            # Safe normalization to [0, 1]
+            fmin = frame.min()
+            fmax = frame.max()
+            frame = (frame - fmin) / (fmax - fmin + 1e-8)
 
             frame_tensor = torch.from_numpy(frame.copy()).unsqueeze(0).float()
 
@@ -98,15 +107,16 @@ class EventVideoDataset(Dataset):
             cap.release()
 
             if len(all_frames) == 0:
-                frame_tensor = torch.zeros((1, 768, 1024), dtype=torch.float32)
+                frame_tensor = torch.zeros((1, config.EVENT_HEIGHT, config.EVENT_WIDTH), dtype=torch.float32)
             else:
-                if self.max_frames is not None and len(all_frames) > self.max_frames:
-                    indices = np.random.choice(len(all_frames), self.max_frames, replace=False)
-                    t = np.random.choice(indices)
-                else:
-                    t = np.random.randint(0, len(all_frames))
+                # Deterministic middle-frame selection
+                t = len(all_frames) // 2
 
-                frame = all_frames[t]
+                frame = all_frames[t].astype(np.float32)
+                # Normalize to [0, 1]
+                fmin = frame.min()
+                fmax = frame.max()
+                frame = (frame - fmin) / (fmax - fmin + 1e-8)
                 frame_tensor = torch.from_numpy(frame).unsqueeze(0).float()
 
         else:

@@ -66,7 +66,7 @@ def main():
     print("====================================")
     print("Step 1: Building Manifest")
     print("====================================")
-    build_manifest(config.V2E_ROOT, manifest_path)
+    build_manifest(config.V2E_ROOT, manifest_path, frames_root=config.FRAMES_ROOT)
 
     print("\n====================================")
     print("Step 1b: Building Enriched Canonical Splits")

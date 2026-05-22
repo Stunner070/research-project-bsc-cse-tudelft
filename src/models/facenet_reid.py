@@ -25,6 +25,10 @@ class FaceNetReID(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(embedding_dim, num_classes)
 
+    def get_embedding(self, x):
+        """Return raw backbone embeddings (no dropout, no classifier)."""
+        return self.backbone(x)
+
     def forward(self, x):
         # x is expected to be (B, 3, 160, 160)
         embeddings = self.backbone(x)

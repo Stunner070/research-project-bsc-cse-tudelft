@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F_nn
+import math
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
 from torch.optim import Adam
@@ -21,6 +22,32 @@ def get_device(device_arg: str = 'auto') -> torch.device:
     if device_arg == 'cuda' and torch.cuda.is_available():
         return torch.device('cuda')
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+class ArcFaceLoss(nn.Module):
+    """Additive Angular Margin loss (ArcFace) for metric learning."""
+    def __init__(self, embedding_dim: int, num_classes: int, s: float = 30.0, m: float = 0.50):
+        super().__init__()
+        self.s = s
+        self.m = m
+        self.W = nn.Parameter(torch.FloatTensor(num_classes, embedding_dim))
+        nn.init.xavier_uniform_(self.W)
+        self.ce = nn.CrossEntropyLoss()
+
+    def forward(self, embeddings, labels):
+        # L2-normalise embeddings and weights
+        x = F_nn.normalize(embeddings, p=2, dim=1)
+        W = F_nn.normalize(self.W, p=2, dim=1)
+        cosine = F_nn.linear(x, W)  # (B, num_classes)
+        # Clamp for numerical stability
+        cosine = cosine.clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+        theta = torch.acos(cosine)
+        # Add angular margin to the target class
+        one_hot = torch.zeros_like(cosine)
+        one_hot.scatter_(1, labels.unsqueeze(1), 1.0)
+        logits = torch.cos(theta + one_hot * self.m)
+        logits = logits * self.s
+        return self.ce(logits, labels)
+
 class ReidBaseline(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -137,8 +164,14 @@ def run_training(
     if test_query_attacked_dataset:
          test_query_attacked_loader = DataLoader(test_query_attacked_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
+    # --- loss & optimizer setup ---
+    arcface = None
+    if backbone == 'facenet':
+        arcface = ArcFaceLoss(embedding_dim=model.embed_dim, num_classes=num_classes).to(device)
+        optimizer = Adam(list(model.parameters()) + list(arcface.parameters()), lr=1e-3)
+    else:
+        optimizer = Adam(model.parameters(), lr=1e-3)
     criterion = nn.CrossEntropyLoss().to(device)
-    optimizer = Adam(model.parameters(), lr=1e-3)
     
     best_mAP = -1.0
     best_val_rank1 = -1.0
@@ -156,8 +189,20 @@ def run_training(
             frames = frames.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             optimizer.zero_grad()
-            logits, features = model(frames)
-            loss = criterion(logits, labels)
+
+            if arcface is not None:
+                # ArcFace path: use raw embeddings
+                embeddings = model.get_embedding(frames)
+                loss = arcface(embeddings, labels)
+                # Compute pseudo-logits for accuracy tracking
+                with torch.no_grad():
+                    x_n = F_nn.normalize(embeddings, p=2, dim=1)
+                    W_n = F_nn.normalize(arcface.W, p=2, dim=1)
+                    logits = F_nn.linear(x_n, W_n) * arcface.s
+            else:
+                logits, features = model(frames)
+                loss = criterion(logits, labels)
+
             loss.backward()
             optimizer.step()
             train_loss += loss.item() * frames.size(0)

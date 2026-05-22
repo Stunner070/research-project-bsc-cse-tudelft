@@ -4,11 +4,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # Root directory with per-video v2e outputs (events.h5 + dvs.avi)
-V2E_ROOT = Path("/projects/rpevents7/celebvhq/first_500_conv/baseline_346/")
+V2E_ROOT = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")
 # V2E_ROOT = Path("C:/Users/sofya/Desktop/event_videos/346x260")
 
 # Root directory for all derived outputs
-WORK_DIR = Path("/projects/rpevents7/celebvhq/output_30/")
+WORK_DIR = Path("/scratch/sofyanali/voxceleb/dev/output_baseline")
 # WORK_DIR = Path("C:/Users/sofya/Desktop/rp code/output")
 
 # Info json
@@ -19,7 +19,7 @@ MANIFEST_DIR = WORK_DIR / "manifests"
 SPLITS_DIR = WORK_DIR / "splits"
 FRAMES_ROOT = WORK_DIR / "frames"
 # MODIFIED_QUERY_DIR = Path("C:/Users/sofya/Desktop/event_videos/346x260")
-MODIFIED_QUERY_DIR = Path("/projects/rpevents7/celebvhq/first_500_conv/baseline_346/")
+MODIFIED_QUERY_DIR = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")
 MODELS_EVENT_FRAMES = WORK_DIR / "models" / "event_frames"
 MODELS_DVS_AVI = WORK_DIR / "models" / "dvs_avi"
 
