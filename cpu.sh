@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=testrun20epoch
+#SBATCH --job-name=testrun
 #SBATCH --partition=compute
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=4
