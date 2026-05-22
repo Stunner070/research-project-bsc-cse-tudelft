@@ -1,9 +1,10 @@
 import argparse
+import concurrent.futures
 import csv
+import gc
 import sys
 import time
 from pathlib import Path
-import concurrent.futures
 
 # Assumes this script is run from a path where src is in PYTHONPATH,
 # or we can append the parent dir to sys.path
@@ -76,22 +77,26 @@ def batch_convert_events(manifest_csv: Path, output_root: Path, dt: float,
             t_file = time.perf_counter() - t0_file
 
             msg = f"[{i}/{total_videos}] {video_id} handled {num_events} events. Saved array {frames.shape} in {t_file:.3f}s (read: {t_read:.2f}s, conv: {t_conv:.2f}s, save: {t_save:.2f}s)"
+
+            # Free large arrays immediately
+            del events, frames
+            gc.collect()
+
             return (True, msg)
 
         except Exception as e:
             return (False, f"[{i}/{total_videos}] Conversion crashed for {video_id}: {e}")
 
-    # Use ThreadPoolExecutor or ProcessPoolExecutor depending on device
-    # For GPU operations in PyTorch, threads are deeply bound, but ThreadPoolExecutor keeps GPU memory in a single process to avoid PyTorch multiprocessing CUDA sharing errors
-    # For CPU, multiprocessing would be better, but given it runs fast on GPU, we use simple threads for I/O bound masking.
-    workers = 4 # Default standard concurrent workers
+    # Use ThreadPoolExecutor for concurrent I/O + GPU compute overlap.
+    # Limit to 2 workers to cap peak memory: each video can produce arrays
+    # up to ~1.3 GB (e.g. 3740×260×346 float32), so 2 concurrent workers
+    # keeps usage within the 12 GB SLURM allocation (4 CPUs × 3 GB).
+    workers = 2
     print(f"Starting parallel batch conversion with {workers} concurrent workers...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        # Map tasks
         results = executor.map(process_row, enumerate(rows, start=1))
 
-        # Process results as they finish
         for is_success, msg in results:
             print(msg)
             if is_success:
