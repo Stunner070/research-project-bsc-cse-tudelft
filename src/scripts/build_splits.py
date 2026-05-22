@@ -10,27 +10,20 @@ import config
 
 def build_splits(
     manifest_csv: Path,
-    json_path: Path,
-    output_enriched: Path,
-    splits_dir: Path,
-    id_column: str = "ytb_id",
+    json_path: Path = None,
+    output_enriched: Path = None,
+    splits_dir: Path = None,
+    id_column: str = "identity_id",
     min_clips_per_identity: int = 2,
     seed: int = 42
 ):
     print(f"Reading manifest from {manifest_csv}")
     df = pd.read_csv(manifest_csv)
 
-    # We expect video_id to be something like --aqjaJyZLk_0
-    print(f"Reading JSON from {json_path}")
-    if not json_path.exists():
-        print(f"Warning: JSON not found at {json_path}. Mocking ytb_id with video_id for now.")
-        df['ytb_id'] = df['video_id']
-        df['clip_id'] = df['video_id']
-        df['bbox_top'] = 0
-        df['bbox_bottom'] = config.EVENT_HEIGHT
-        df['bbox_left'] = 0
-        df['bbox_right'] = config.EVENT_WIDTH
-    else:
+    # We expect video_id to be something like id00019_ITOTv0r_YoM_00022 (VoxCeleb)
+    # or --aqjaJyZLk_0 (CelebV-HQ). The JSON enrichment is only for CelebV-HQ.
+    if json_path is not None and json_path.exists():
+        print(f"Reading JSON from {json_path}")
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -54,8 +47,8 @@ def build_splits(
                     "bbox_right": bbox[2],
                 })
             else:
-                # Fallback, extract ytb_id by removing the last underscore index if standard format
-                ytb_id = vid.rsplit('_', 1)[0] if '_' in vid else vid
+                # Fallback: extract ytb_id from video_id
+                ytb_id = vid.split('_', 1)[0] if '_' in vid else vid
                 info_list.append({
                     "video_id": vid,
                     "clip_id": vid,
@@ -68,6 +61,13 @@ def build_splits(
 
         info_df = pd.DataFrame(info_list)
         df = df.merge(info_df, on="video_id", how="left")
+    else:
+        print("No JSON provided or not found — using identity_id from manifest.")
+        # Use identity_id already computed by build_manifest
+        if 'identity_id' not in df.columns:
+            df['identity_id'] = df['video_id'].apply(
+                lambda v: v.split('_', 1)[0] if '_' in v else v
+            )
 
     df['identity'] = df[id_column]
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--json_path", type=str, required=True)
     parser.add_argument("--output_enriched", type=str, required=True)
     parser.add_argument("--splits_dir", type=str, required=True)
-    parser.add_argument("--id_column", type=str, default="ytb_id")
+    parser.add_argument("--id_column", type=str, default="identity_id")
     parser.add_argument("--min_clips_per_identity", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()

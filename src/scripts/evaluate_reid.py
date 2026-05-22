@@ -41,7 +41,7 @@ def main():
 
     print(f"Loading data mappings from {args.train_csv}")
     train_df = pd.read_csv(args.train_csv)
-    id_col = 'identity' if 'identity' in train_df.columns else 'ytb_id'
+    id_col = next(c for c in ['identity', 'identity_id', 'ytb_id'] if c in train_df.columns)
     unique_ids = train_df[id_col].unique()
     id_to_int = {identity: i for i, identity in enumerate(unique_ids)}
     num_classes = len(unique_ids)

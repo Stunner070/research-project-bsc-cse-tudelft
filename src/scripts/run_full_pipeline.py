@@ -73,10 +73,10 @@ def main():
     print("====================================")
     build_splits(
         manifest_path,
-        config.CELEBVHQ_INFO_JSON,
+        None,
         manifest_enriched,
         config.SPLITS_DIR,
-        id_column="ytb_id",
+        id_column="identity_id",
         min_clips_per_identity=args.min_clips
     )
 

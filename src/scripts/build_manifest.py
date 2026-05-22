@@ -7,7 +7,7 @@ def build_manifest(root: Path, output_csv: Path, frames_root: Path = None) -> in
     """Build a CSV manifest by scanning v2e_root for all valid converted samples.
 
     Scans recursively for events.h5 files.  Infers identity_id from the
-    video_id using the project convention: video_id.rsplit('_', 1)[0].
+    video_id using the project convention: video_id.split('_', 1)[0].
     No hard-coded max on identities or clips.
     """
     root_path = root.resolve()
@@ -26,7 +26,7 @@ def build_manifest(root: Path, output_csv: Path, frames_root: Path = None) -> in
         seen_video_ids.add(video_id)
 
         # Derive person-level identity from the naming convention
-        identity_id = video_id.rsplit("_", 1)[0] if "_" in video_id else video_id
+        identity_id = video_id.split("_", 1)[0] if "_" in video_id else video_id
 
         dvs_avi_path = parent_dir / "dvs.avi"
         dvs_avi_str = str(dvs_avi_path.resolve()) if dvs_avi_path.exists() else ""
@@ -48,7 +48,7 @@ def build_manifest(root: Path, output_csv: Path, frames_root: Path = None) -> in
                     continue
                 seen_video_ids.add(video_id)
 
-                identity_id = video_id.rsplit("_", 1)[0] if "_" in video_id else video_id
+                identity_id = video_id.split("_", 1)[0] if "_" in video_id else video_id
 
                 manifest_entries.append({
                     "video_id": video_id,
