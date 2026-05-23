@@ -27,15 +27,58 @@ DEFAULT_NUM_WORKERS = 4  # Default number of multiprocessing workers for Dataloa
 # MODIFIED_QUERY_DIR = Path("C:/Users/sofya/Desktop/event_videos/346x260")
 MODIFIED_QUERY_DIR = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")  # Path to alternate queries for post-training ASR evaluation
 
+
+
+
+
+
 # ─── Retrieval Evaluation Pipeline Only (no-training) ────────────────────────
-RETRIEVAL_MANIFEST_A     = MANIFEST_DIR / "manifest_enriched.csv"  # Manifest path for baseline dataset
-RETRIEVAL_FRAMES_ROOT_A  = FRAMES_ROOT  # Root frames path for baseline dataset
-RETRIEVAL_LABEL_A        = "Baseline"  # Label name for baseline reporting
+# Dataset A (Baseline) — source and output roots
+RETRIEVAL_V2E_ROOT_A     = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")     # V2E source root for baseline
+RETRIEVAL_WORK_DIR_A     = Path("/scratch/sofyanali/voxceleb/dev/output_baseline")  # Derived-output root for baseline
 
-RETRIEVAL_MANIFEST_B     = MANIFEST_DIR / "manifest_enriched.csv"  # Manifest path for adjusted dataset
-RETRIEVAL_FRAMES_ROOT_B  = FRAMES_ROOT  # Root frames path for adjusted dataset
-RETRIEVAL_LABEL_B        = "Adjusted"  # Label name for adjusted reporting
+# Dataset A — derived paths (built from roots above)
+RETRIEVAL_MANIFEST_DIR_A = RETRIEVAL_WORK_DIR_A / "manifests"
+RETRIEVAL_FRAMES_ROOT_A  = RETRIEVAL_WORK_DIR_A / "frames"
+RETRIEVAL_MANIFEST_A     = RETRIEVAL_MANIFEST_DIR_A / "manifest_enriched.csv"
+RETRIEVAL_LABEL_A        = "Baseline"
 
+# Dataset B (Adjusted) — source and output roots
+RETRIEVAL_V2E_ROOT_B     = Path("/scratch/sofyanali/voxceleb/dev/resolution_640")     # V2E source root for adjusted
+RETRIEVAL_WORK_DIR_B     = Path("/scratch/sofyanali/voxceleb/dev/output_resolution_640")  # Derived-output root for adjusted
+
+# Dataset B — derived paths (built from roots above)
+RETRIEVAL_MANIFEST_DIR_B = RETRIEVAL_WORK_DIR_B / "manifests"
+RETRIEVAL_FRAMES_ROOT_B  = RETRIEVAL_WORK_DIR_B / "frames"
+RETRIEVAL_MANIFEST_B     = RETRIEVAL_MANIFEST_DIR_B / "manifest_enriched.csv"
+RETRIEVAL_LABEL_B        = "Adjusted"
+
+# Shared retrieval settings
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = WORK_DIR / "retrieval_results"  # Folder to write the comparison JSON
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
+
+# ─── Retrieval Model & Feature Settings ──────────────────────────────────────
+RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" | "insightface"
+                                                 # "insightface" uses a frozen pretrained recognizer (no training)
+
+# ─── Face Cropping Settings ──────────────────────────────────────────────────
+RETRIEVAL_USE_FACE_CROP       = False            # True = crop face region before embedding extraction
+RETRIEVAL_FACE_CROP_SOURCE    = "annotation"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
+RETRIEVAL_FACE_CROP_MARGIN    = 0.15             # Fractional margin to expand around the detected/annotated bbox
+RETRIEVAL_MIN_FACE_SIZE       = 20               # Reject face crops smaller than this in pixels (width or height)
+
+# ─── Temporal Sampling Settings ──────────────────────────────────────────────
+RETRIEVAL_TEMPORAL_MODE       = "multi-average"         # Frame selection: "center" (single T//2) | "multi_average"
+RETRIEVAL_NUM_SAMPLE_FRAMES   = 5                # Number of frames to sample when mode is "multi_average"
+RETRIEVAL_FRAME_SAMPLE_STRATEGY = "uniform"      # Sampling strategy: "uniform" (evenly spaced) | "center_window"
+
+# ─── InsightFace-specific Settings (frozen inference only) ───────────────────
+RETRIEVAL_INSIGHTFACE_MODEL    = "buffalo_l"              # InsightFace model pack name
+RETRIEVAL_INSIGHTFACE_PROVIDER = "CUDAExecutionProvider"  # ONNX Runtime execution provider
+RETRIEVAL_INSIGHTFACE_DET_SIZE = (320, 320)               # Detector input resolution
+
+# ─── Debug / Visualization ───────────────────────────────────────────────────
+RETRIEVAL_SAVE_DEBUG_CROPS     = False                          # Save example crops for visual inspection
+RETRIEVAL_DEBUG_CROP_DIR       = WORK_DIR / "retrieval_debug_crops"  # Output directory for debug crops
+RETRIEVAL_DEBUG_CROP_MAX       = 50                             # Max number of debug crops saved per run

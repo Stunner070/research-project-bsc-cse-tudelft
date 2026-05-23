@@ -87,21 +87,46 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
             f"after attempting to build it automatically. Please check your v2e_root and workspace directories."
         )
 
+def _config_summary():
+    """Build human-readable strings describing the active retrieval config."""
+    model_label = config.RETRIEVAL_MODEL_NAME.upper()
+    crop_label = (f"crop={config.RETRIEVAL_FACE_CROP_SOURCE}"
+                  if config.RETRIEVAL_USE_FACE_CROP else "no-crop")
+    temporal_label = config.RETRIEVAL_TEMPORAL_MODE
+    if config.RETRIEVAL_TEMPORAL_MODE == "multi_average":
+        temporal_label += (f" (n={config.RETRIEVAL_NUM_SAMPLE_FRAMES}, "
+                           f"{config.RETRIEVAL_FRAME_SAMPLE_STRATEGY})")
+    return model_label, crop_label, temporal_label
+
+
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device auto-detected: {device}")
 
-    print("\n====================================")
-    print("Retrieval Evaluation — Frozen FaceNet")
-    print("====================================")
+    model_label, crop_label, temporal_label = _config_summary()
+
+    print(f"\n====================================")
+    print(f"Retrieval Evaluation — {model_label} | {crop_label} | {temporal_label}")
+    print(f"====================================")
+
+    # --- Print dataset path info for debugging ---
+    print(f"\n--- Dataset A: {config.RETRIEVAL_LABEL_A} ---")
+    print(f"    V2E root:     {config.RETRIEVAL_V2E_ROOT_A}")
+    print(f"    Manifest:     {config.RETRIEVAL_MANIFEST_A}")
+    print(f"    Frames root:  {config.RETRIEVAL_FRAMES_ROOT_A}")
+    print(f"\n--- Dataset B: {config.RETRIEVAL_LABEL_B} ---")
+    print(f"    V2E root:     {config.RETRIEVAL_V2E_ROOT_B}")
+    print(f"    Manifest:     {config.RETRIEVAL_MANIFEST_B}")
+    print(f"    Frames root:  {config.RETRIEVAL_FRAMES_ROOT_B}")
+    print()
 
     # Dataset A (Baseline)
-    print(f"\n[A] Checking prerequisites for {config.RETRIEVAL_LABEL_A}...")
+    print(f"[A] Checking prerequisites for {config.RETRIEVAL_LABEL_A}...")
     ensure_prerequisites(
         manifest_path=config.RETRIEVAL_MANIFEST_A,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
-        v2e_root=config.V2E_ROOT,
-        work_dir=config.WORK_DIR
+        v2e_root=config.RETRIEVAL_V2E_ROOT_A,
+        work_dir=config.RETRIEVAL_WORK_DIR_A
     )
     
     print(f"[A] Embedding {config.RETRIEVAL_LABEL_A}...")
@@ -120,8 +145,8 @@ def main():
     ensure_prerequisites(
         manifest_path=config.RETRIEVAL_MANIFEST_B,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
-        v2e_root=config.V2E_ROOT,
-        work_dir=config.WORK_DIR
+        v2e_root=config.RETRIEVAL_V2E_ROOT_B,
+        work_dir=config.RETRIEVAL_WORK_DIR_B
     )
     
     print(f"[B] Embedding {config.RETRIEVAL_LABEL_B}...")
@@ -140,7 +165,7 @@ def main():
     d_asr = res_b["asr"] - res_a["asr"]
 
     print("\n============================================================")
-    print("RETRIEVAL EVALUATION — NO-TRAINING FROZEN FACENET ATTACKER")
+    print(f"RETRIEVAL EVALUATION — {model_label} | {crop_label} | {temporal_label}")
     print("============================================================")
     print(f"{'Metric':<10} {config.RETRIEVAL_LABEL_A:<15} {config.RETRIEVAL_LABEL_B:<15} {'Delta':<15}")
     print("-" * 60)
@@ -161,8 +186,26 @@ def main():
         res_file = out_dir / "retrieval_results.json"
 
         out_data = {
-            "label_a": config.RETRIEVAL_LABEL_A,
-            "label_b": config.RETRIEVAL_LABEL_B,
+            "config": {
+                "model": config.RETRIEVAL_MODEL_NAME,
+                "crop": config.RETRIEVAL_USE_FACE_CROP,
+                "crop_source": config.RETRIEVAL_FACE_CROP_SOURCE,
+                "temporal_mode": config.RETRIEVAL_TEMPORAL_MODE,
+                "num_sample_frames": config.RETRIEVAL_NUM_SAMPLE_FRAMES,
+                "frame_sample_strategy": config.RETRIEVAL_FRAME_SAMPLE_STRATEGY,
+            },
+            "dataset_a": {
+                "label": config.RETRIEVAL_LABEL_A,
+                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_A),
+                "manifest": str(config.RETRIEVAL_MANIFEST_A),
+                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_A),
+            },
+            "dataset_b": {
+                "label": config.RETRIEVAL_LABEL_B,
+                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_B),
+                "manifest": str(config.RETRIEVAL_MANIFEST_B),
+                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_B),
+            },
             "results_a": res_a,
             "results_b": res_b,
             "delta": {
