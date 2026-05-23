@@ -57,11 +57,15 @@ def extract_clip_embeddings(manifest_path, frames_root, weights_path, device, ba
         iid = row[id_col]
         role = row["role"]
 
-        if "frames_path" in row and pd.notna(row["frames_path"]) and Path(row["frames_path"]).exists():
+        # Only accept frames_path if it exists AND is a .npy file;
+        # ignore events_path / eventspath (points to .h5, not loadable by np.load).
+        if ("frames_path" in row
+                and pd.notna(row["frames_path"])
+                and Path(row["frames_path"]).suffix == ".npy"
+                and Path(row["frames_path"]).exists()):
             npy_path = Path(row["frames_path"])
-        elif "events_path" in row and pd.notna(row["events_path"]) and Path(row["events_path"]).exists():
-            npy_path = Path(row["events_path"])
         else:
+            # Default: look for the pre-generated event_frames.npy per clip
             npy_path = Path(frames_root) / vid / "event_frames.npy"
 
         if not npy_path.exists():
