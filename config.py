@@ -44,18 +44,18 @@ RETRIEVAL_MANIFEST_A     = RETRIEVAL_MANIFEST_DIR_A / "manifest_enriched.csv"
 RETRIEVAL_LABEL_A        = "Baseline"
 
 # Dataset B (Adjusted) — source and output roots
-RETRIEVAL_V2E_ROOT_B     = Path("/scratch/sofyanali/voxceleb/dev/resolution_640")     # V2E source root for adjusted
-RETRIEVAL_WORK_DIR_B     = Path("/scratch/sofyanali/voxceleb/dev/output_resolution_640")  # Derived-output root for adjusted
+RETRIEVAL_V2E_ROOT_B     = Path("/scratch/sofyanali/voxceleb/dev/leak_5")     # V2E source root for adjusted
+RETRIEVAL_WORK_DIR_B     = Path("/scratch/sofyanali/voxceleb/dev/output_leak_5")  # Derived-output root for adjusted
 
 # Dataset B — derived paths (built from roots above)
 RETRIEVAL_MANIFEST_DIR_B = RETRIEVAL_WORK_DIR_B / "manifests"
 RETRIEVAL_FRAMES_ROOT_B  = RETRIEVAL_WORK_DIR_B / "frames"
 RETRIEVAL_MANIFEST_B     = RETRIEVAL_MANIFEST_DIR_B / "manifest_enriched.csv"
-RETRIEVAL_LABEL_B        = "Adjusted"
+RETRIEVAL_LABEL_B        = "Adjusted leak5"
 
 # Shared retrieval settings
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results3"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results5"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
