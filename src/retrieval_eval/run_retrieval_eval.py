@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import json
 import torch
+import numpy as np
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -87,6 +88,95 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
             f"after attempting to build it automatically. Please check your v2e_root and workspace directories."
         )
 
+
+def align_manifests(
+    manifest_a: Path,
+    manifest_b: Path,
+    min_clips_per_identity: int = 2,
+    seed: int = 42,
+) -> tuple:
+    """Align two manifests so they share the exact same identities and video IDs.
+
+    Steps:
+      1. Load both enriched manifests.
+      2. Intersect on identity_id — keep only identities present in BOTH.
+      3. Intersect on video_id  — keep only clips present in BOTH.
+      4. Re-apply min_clips_per_identity filter on the intersection.
+      5. Assign query/gallery roles consistently (same query clip for each
+         identity in both A and B) using a fixed random seed.
+      6. Overwrite both manifest files with the aligned versions.
+
+    Returns (df_a, df_b) after alignment.
+    """
+    df_a = pd.read_csv(manifest_a)
+    df_b = pd.read_csv(manifest_b)
+
+    # Determine the identity column
+    id_col = "identity_id" if "identity_id" in df_a.columns else (
+        "identity" if "identity" in df_a.columns else "video_id"
+    )
+
+    print(f"\n[ALIGN] Before alignment:")
+    print(f"  A: {len(df_a)} clips, {df_a[id_col].nunique()} identities")
+    print(f"  B: {len(df_b)} clips, {df_b[id_col].nunique()} identities")
+
+    # Step 1: intersect identities
+    common_ids = set(df_a[id_col].unique()) & set(df_b[id_col].unique())
+    df_a = df_a[df_a[id_col].isin(common_ids)].copy()
+    df_b = df_b[df_b[id_col].isin(common_ids)].copy()
+
+    # Step 2: intersect video IDs
+    common_vids = set(df_a["video_id"].unique()) & set(df_b["video_id"].unique())
+    df_a = df_a[df_a["video_id"].isin(common_vids)].copy()
+    df_b = df_b[df_b["video_id"].isin(common_vids)].copy()
+
+    # Step 3: re-apply minimum clips filter on the intersection
+    counts = df_a.groupby(id_col)["video_id"].count()
+    valid_ids = counts[counts >= min_clips_per_identity].index.tolist()
+    df_a = df_a[df_a[id_col].isin(valid_ids)].copy()
+    df_b = df_b[df_b[id_col].isin(valid_ids)].copy()
+
+    # Step 4: assign consistent roles across both datasets
+    # Sort identically so row order matches
+    df_a = df_a.sort_values([id_col, "video_id"]).reset_index(drop=True)
+    df_b = df_b.sort_values([id_col, "video_id"]).reset_index(drop=True)
+
+    np.random.seed(seed)
+    roles = []
+    for _, group in df_a.groupby(id_col):
+        n = len(group)
+        # Pick one random query index within this identity's clips
+        query_local = np.random.randint(0, n)
+        group_roles = ["gallery"] * n
+        group_roles[query_local] = "query"
+        roles.extend(group_roles)
+
+    df_a["role"] = roles
+    df_b["role"] = roles  # same roles for both — same clips, same order
+
+    # Also ensure the 'identity' column exists (used by embed.py)
+    if "identity" not in df_a.columns:
+        df_a["identity"] = df_a[id_col]
+    if "identity" not in df_b.columns:
+        df_b["identity"] = df_b[id_col]
+
+    print(f"[ALIGN] After alignment:")
+    print(f"  Common identities: {len(valid_ids)}")
+    print(f"  Common clips:      {len(df_a)}")
+    print(f"  Queries per set:   {(df_a['role'] == 'query').sum()}")
+    print(f"  Gallery per set:   {(df_a['role'] == 'gallery').sum()}")
+
+    # Step 5: overwrite the manifest files
+    manifest_a.parent.mkdir(parents=True, exist_ok=True)
+    manifest_b.parent.mkdir(parents=True, exist_ok=True)
+    df_a.to_csv(manifest_a, index=False)
+    df_b.to_csv(manifest_b, index=False)
+    print(f"[ALIGN] Wrote aligned manifests:")
+    print(f"  A: {manifest_a}")
+    print(f"  B: {manifest_b}")
+
+    return df_a, df_b
+
 def _config_summary():
     """Build human-readable strings describing the active retrieval config."""
     model_label = config.RETRIEVAL_MODEL_NAME.upper()
@@ -120,7 +210,7 @@ def main():
     print(f"    Frames root:  {config.RETRIEVAL_FRAMES_ROOT_B}")
     print()
 
-    # Dataset A (Baseline)
+    # Dataset A (Baseline) — ensure prerequisites
     print(f"[A] Checking prerequisites for {config.RETRIEVAL_LABEL_A}...")
     ensure_prerequisites(
         manifest_path=config.RETRIEVAL_MANIFEST_A,
@@ -128,8 +218,26 @@ def main():
         v2e_root=config.RETRIEVAL_V2E_ROOT_A,
         work_dir=config.RETRIEVAL_WORK_DIR_A
     )
-    
-    print(f"[A] Embedding {config.RETRIEVAL_LABEL_A}...")
+
+    # Dataset B (Adjusted) — ensure prerequisites
+    print(f"\n[B] Checking prerequisites for {config.RETRIEVAL_LABEL_B}...")
+    ensure_prerequisites(
+        manifest_path=config.RETRIEVAL_MANIFEST_B,
+        frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
+        v2e_root=config.RETRIEVAL_V2E_ROOT_B,
+        work_dir=config.RETRIEVAL_WORK_DIR_B
+    )
+
+    # Align manifests — intersect identities & clips, assign consistent roles
+    align_manifests(
+        manifest_a=Path(config.RETRIEVAL_MANIFEST_A),
+        manifest_b=Path(config.RETRIEVAL_MANIFEST_B),
+        min_clips_per_identity=2,
+        seed=42,
+    )
+
+    # Embed Dataset A
+    print(f"\n[A] Embedding {config.RETRIEVAL_LABEL_A}...")
     emb_a = extract_clip_embeddings(
         manifest_path=config.RETRIEVAL_MANIFEST_A,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
@@ -140,16 +248,8 @@ def main():
     res_a = evaluate_retrieval(emb_a)
     print(f"    done. ({res_a['num_gallery']} gallery, {res_a['num_queries']} query clips)")
 
-    # Dataset B (Adjusted)
-    print(f"\n[B] Checking prerequisites for {config.RETRIEVAL_LABEL_B}...")
-    ensure_prerequisites(
-        manifest_path=config.RETRIEVAL_MANIFEST_B,
-        frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
-        v2e_root=config.RETRIEVAL_V2E_ROOT_B,
-        work_dir=config.RETRIEVAL_WORK_DIR_B
-    )
-    
-    print(f"[B] Embedding {config.RETRIEVAL_LABEL_B}...")
+    # Embed Dataset B
+    print(f"\n[B] Embedding {config.RETRIEVAL_LABEL_B}...")
     emb_b = extract_clip_embeddings(
         manifest_path=config.RETRIEVAL_MANIFEST_B,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_B,

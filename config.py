@@ -55,21 +55,21 @@ RETRIEVAL_LABEL_B        = "Adjusted"
 
 # Shared retrieval settings
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results2"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
-RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" | "insightface"
+RETRIEVAL_MODEL_NAME          = "insightface"        # Embedding backend: "facenet" | "insightface"
                                                  # "insightface" uses a frozen pretrained recognizer (no training)
 
 # ─── Face Cropping Settings ──────────────────────────────────────────────────
-RETRIEVAL_USE_FACE_CROP       = False            # True = crop face region before embedding extraction
-RETRIEVAL_FACE_CROP_SOURCE    = "annotation"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
+RETRIEVAL_USE_FACE_CROP       = True            # True = crop face region before embedding extraction
+RETRIEVAL_FACE_CROP_SOURCE    = "insightface"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
 RETRIEVAL_FACE_CROP_MARGIN    = 0.15             # Fractional margin to expand around the detected/annotated bbox
 RETRIEVAL_MIN_FACE_SIZE       = 20               # Reject face crops smaller than this in pixels (width or height)
 
 # ─── Temporal Sampling Settings ──────────────────────────────────────────────
-RETRIEVAL_TEMPORAL_MODE       = "multi-average"         # Frame selection: "center" (single T//2) | "multi_average"
+RETRIEVAL_TEMPORAL_MODE       = "multi_average"         # Frame selection: "center" (single T//2) | "multi_average"
 RETRIEVAL_NUM_SAMPLE_FRAMES   = 5                # Number of frames to sample when mode is "multi_average"
 RETRIEVAL_FRAME_SAMPLE_STRATEGY = "uniform"      # Sampling strategy: "uniform" (evenly spaced) | "center_window"
 
