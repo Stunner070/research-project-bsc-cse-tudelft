@@ -13,4 +13,5 @@ module load python/3.11.9
 
 . /scratch/sofyanali/.venv/bin/activate
 
-srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode event_frames_only  --device cuda --backbone facenet --privacy_eval
+#srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode event_frames_only  --device cuda --backbone facenet --privacy_eval
+srun python /scratch/sofyanali/rpbsc/src/run_retrieval_pipeline.py
