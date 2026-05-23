@@ -34,10 +34,11 @@ def _require_insightface():
     try:
         import insightface  # noqa: F811
         return insightface
-    except ImportError:
+    except ImportError as e:
         raise ImportError(
+            f"Failed to import 'insightface'. (Original error: {e})\n"
             "The 'insightface' package is required when RETRIEVAL_MODEL_NAME='insightface' "
-            "or RETRIEVAL_FACE_CROP_SOURCE='insightface'.  Install it with:\n"
+            "or RETRIEVAL_FACE_CROP_SOURCE='insightface'. Ensure you have installed it:\n"
             "  pip install insightface onnxruntime-gpu"
         )
 
