@@ -59,14 +59,18 @@ RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results2"  # Folder to writ
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
-RETRIEVAL_MODEL_NAME          = "insightface"        # Embedding backend: "facenet" | "insightface"
+RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" | "insightface"
                                                  # "insightface" uses a frozen pretrained recognizer (no training)
 
 # ─── Face Cropping Settings ──────────────────────────────────────────────────
-RETRIEVAL_USE_FACE_CROP       = True            # True = crop face region before embedding extraction
-RETRIEVAL_FACE_CROP_SOURCE    = "insightface"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
+RETRIEVAL_USE_FACE_CROP       = True             # True = crop face region before embedding extraction
+RETRIEVAL_FACE_CROP_SOURCE    = "annotation"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
 RETRIEVAL_FACE_CROP_MARGIN    = 0.15             # Fractional margin to expand around the detected/annotated bbox
 RETRIEVAL_MIN_FACE_SIZE       = 20               # Reject face crops smaller than this in pixels (width or height)
+
+# Annotation Crop Settings (when RETRIEVAL_FACE_CROP_SOURCE == "annotation")
+RETRIEVAL_ANNOTATION_H5       = Path("/scratch/sofyanali/voxceleb/dev/txt.h5")  # Path to generated annotation HDF5
+RETRIEVAL_ANNOTATION_FALLBACK = "median"         # Missing frame fallback: "nearest", "median", "none"
 
 # ─── Temporal Sampling Settings ──────────────────────────────────────────────
 RETRIEVAL_TEMPORAL_MODE       = "multi_average"         # Frame selection: "center" (single T//2) | "multi_average"

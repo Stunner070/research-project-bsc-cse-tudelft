@@ -121,27 +121,94 @@ def frame_to_uint8_rgb(frame_norm: np.ndarray) -> np.ndarray:
 #  4. BBOX / FACE CROPPING
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_frame_bbox_for_clip(
-    row: pd.Series,
-    frame_idx: int,
-) -> Optional[Tuple[int, int, int, int]]:
-    """Return (x1, y1, x2, y2) pixel bbox for a specific frame, or None.
-
-    Currently checks for manifest columns 'bbox_x1', 'bbox_y1', 'bbox_x2',
-    'bbox_y2'.  Returns None when those columns are absent or values are NaN.
-
-    Extension points (future):
-      - txt-derived HDF5 bbox lookup via row["bbox_path"] / row["annotation_path"]
-      - nearest-frame bbox interpolation
-      - median bbox fallback
+def parse_h5_keys_from_row(row: pd.Series) -> Tuple[str, str, str]:
     """
-    required = ["bbox_x1", "bbox_y1", "bbox_x2", "bbox_y2"]
-    if not all(col in row.index for col in required):
+    Returns (person_id, youtube_id, clip_name) from a manifest row.
+    video_id format: {identity_id}{youtube_id}{clip_name}
+    e.g. "id00019ITOTv0rYoM00022" -> ("id00019", "ITOTv0rYoM", "00022")
+    """
+    vid = str(row["video_id"])
+    iid = str(row.get("identity_id", ""))
+    
+    if not iid or pd.isna(iid):
+        iid = str(row.get("identity", ""))
+        
+    person_id = iid
+    
+    if vid.startswith(person_id):
+        rest = vid[len(person_id):]
+    else:
+        rest = vid
+        
+    if len(rest) >= 5:
+        clip_name = rest[-5:]
+        youtube_id = rest[:-5]
+    else:
+        clip_name = rest
+        youtube_id = ""
+
+    return person_id, youtube_id, clip_name
+
+
+def get_frame_bbox_from_h5(
+    h5_file, 
+    person_id: str, 
+    youtube_id: str, 
+    clip_name: str, 
+    frame_idx: int, 
+    fallback: str = "median"
+) -> Optional[Tuple[float, float, float, float]]:
+    """Returns normalized [x1, y1, x2, y2] from txt.h5, or None."""
+    if h5_file is None:
         return None
-    vals = [row[c] for c in required]
-    if any(pd.isna(v) for v in vals):
+        
+    group_path = f"{person_id}/{youtube_id}/{clip_name}"
+    if group_path not in h5_file:
         return None
-    return tuple(int(v) for v in vals)
+        
+    group = h5_file[group_path]
+    if "frame" not in group or "bbox_xyxy_norm" not in group:
+        return None
+        
+    frames = group["frame"][:]
+    bboxes = group["bbox_xyxy_norm"][:]
+    
+    # Look for exact frame match
+    idx_arr = np.where(frames == frame_idx)[0]
+    if len(idx_arr) > 0:
+        return tuple(bboxes[idx_arr[0]])
+        
+    # Fallback handling
+    if fallback == "none":
+        return None
+        
+    if fallback == "median":
+        if "median_bbox_xyxy_norm" in group:
+            return tuple(group["median_bbox_xyxy_norm"][:])
+        return None
+        
+    if fallback == "nearest":
+        if len(frames) == 0:
+            return None
+        nearest_idx = np.abs(frames - frame_idx).argmin()
+        return tuple(bboxes[nearest_idx])
+        
+    return None
+
+
+def normalized_bbox_to_pixel_xyxy(
+    bbox_norm: Tuple[float, float, float, float],
+    width: int,
+    height: int,
+) -> Tuple[int, int, int, int]:
+    """Convert normalized [x1, y1, x2, y2] to absolute pixel coordinates."""
+    x1, y1, x2, y2 = bbox_norm
+    return (
+        int(round(x1 * width)),
+        int(round(y1 * height)),
+        int(round(x2 * width)),
+        int(round(y2 * height)),
+    )
 
 
 def _expand_bbox(
@@ -219,6 +286,7 @@ def apply_face_crop(
     row: pd.Series,
     frame_idx: int,
     insight_app=None,
+    h5_file=None,
 ) -> Optional[np.ndarray]:
     """Dispatch face cropping based on config.  Returns cropped RGB or None.
 
@@ -229,10 +297,17 @@ def apply_face_crop(
     min_sz = cfg.RETRIEVAL_MIN_FACE_SIZE
 
     if source == "annotation":
-        bbox = get_frame_bbox_for_clip(row, frame_idx)
-        if bbox is None:
-            return None
-        return crop_face_from_annotation(frame_rgb, bbox, margin, min_sz)
+        if h5_file is not None:
+            pid, yid, cid = parse_h5_keys_from_row(row)
+            bbox_norm = get_frame_bbox_from_h5(
+                h5_file, pid, yid, cid, frame_idx, 
+                fallback=cfg.RETRIEVAL_ANNOTATION_FALLBACK
+            )
+            if bbox_norm is not None:
+                h, w = frame_rgb.shape[:2]
+                bbox_px = normalized_bbox_to_pixel_xyxy(bbox_norm, w, h)
+                return crop_face_from_annotation(frame_rgb, bbox_px, margin, min_sz)
+        return None
 
     if source == "insightface":
         if insight_app is None:
@@ -476,6 +551,7 @@ def extract_clip_embedding(
     backend: Dict[str, Any],
     row: Optional[pd.Series] = None,
     vid: str = "",
+    h5_file = None,
 ) -> Optional[np.ndarray]:
     """Compute a single embedding vector for an entire clip.
 
@@ -516,6 +592,7 @@ def extract_clip_embedding(
             crop_rgb = apply_face_crop(
                 frame_norm, frame_rgb, row, idx,
                 insight_app=insight_app,
+                h5_file=h5_file,
             )
             if crop_rgb is not None:
                 save_debug_crop(vid, idx, f"{cfg.RETRIEVAL_FACE_CROP_SOURCE}_crop", crop_rgb)
@@ -616,6 +693,17 @@ def extract_clip_embeddings(
 
     df = df[df["role"].isin(["gallery", "query"])].copy()
 
+    # --- h5py annotation handling ---
+    h5_file = None
+    use_crop = cfg.RETRIEVAL_USE_FACE_CROP
+    if use_crop and cfg.RETRIEVAL_FACE_CROP_SOURCE == "annotation":
+        h5_path = Path(cfg.RETRIEVAL_ANNOTATION_H5)
+        if h5_path.exists():
+            import h5py
+            h5_file = h5py.File(h5_path, "r")
+        else:
+            print(f"[WARN] Annotation HDF5 not found at {h5_path}")
+
     # --- build backend ---
     backend = build_embedding_backend(device)
     emb_dim = backend["dim"]
@@ -630,6 +718,9 @@ def extract_clip_embeddings(
                            f"{cfg.RETRIEVAL_FRAME_SAMPLE_STRATEGY})")
 
     print(f"[EMBED] Backend: {model_label} | {crop_label} | {temporal_label}")
+    if use_crop and cfg.RETRIEVAL_FACE_CROP_SOURCE == "annotation":
+        print(f"[EMBED] Annotation H5: {cfg.RETRIEVAL_ANNOTATION_H5} (fallback: {cfg.RETRIEVAL_ANNOTATION_FALLBACK})")
+        
     print(f"[EMBED] Manifest: {manifest_path}  ({len(df)} clips)")
 
     gallery_data: Dict[str, list] = {"video_ids": [], "identity_ids": [], "embeddings": []}
@@ -718,7 +809,7 @@ def extract_clip_embeddings(
                 skipped += 1
                 continue
 
-            emb = extract_clip_embedding(arr, backend, row=row, vid=vid)
+            emb = extract_clip_embedding(arr, backend, row=row, vid=vid, h5_file=h5_file)
             if emb is None:
                 print(f"[SKIP] {vid}: embedding extraction failed")
                 skipped += 1
@@ -739,6 +830,9 @@ def extract_clip_embeddings(
 
     print(f"[EMBED] Done. gallery={len(gallery_data['video_ids'])}, "
           f"query={len(query_data['video_ids'])}, skipped={skipped}")
+
+    if h5_file is not None:
+        h5_file.close()
 
     return {"gallery": gallery_data, "query": query_data}
 
