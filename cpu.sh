@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
 #SBATCH --mem-per-cpu=3GB
-#SBATCH --time=03:00:00
+#SBATCH --time=03:50:00
 
 . /scratch/sofyanali/.venv/bin/activate
 

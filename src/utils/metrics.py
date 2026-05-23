@@ -5,6 +5,7 @@ from pathlib import Path
 # Optional imports for privacy metrics
 try:
     from skimage.metrics import structural_similarity as ssim
+    from skimage.metrics import peak_signal_noise_ratio as psnr
     HAS_SKIMAGE = True
 except ImportError:
     HAS_SKIMAGE = False
@@ -190,8 +191,9 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
     """
     results = {
         'ssim_mean': None, 'ssim_std': None, 'ssim_values': [],
+        'psnr_mean': None, 'psnr_std': None, 'psnr_values': [],
         'lpips_mean': None, 'lpips_std': None, 'lpips_values': [],
-        'has_ssim': HAS_SKIMAGE, 'has_lpips': HAS_LPIPS and _lpips_model is not None
+        'has_ssim': HAS_SKIMAGE, 'has_psnr': HAS_SKIMAGE, 'has_lpips': HAS_LPIPS and _lpips_model is not None
     }
 
     if not HAS_SKIMAGE:
@@ -226,9 +228,10 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
 
     N = orig_tensor.shape[0]
 
-    # Compute SSIM
+    # Compute SSIM and PSNR
     if HAS_SKIMAGE:
         ssim_values = []
+        psnr_values = []
         for i in range(N):
             orig_np = orig_tensor[i].cpu().numpy()
             mod_np = mod_tensor[i].cpu().numpy()
@@ -254,10 +257,21 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
             except Exception as e:
                 print(f"Warning: SSIM computation failed for frame {i}: {e}")
 
+            try:
+                val_psnr = psnr(orig_np, mod_np, data_range=1.0)
+                psnr_values.append(float(val_psnr))
+            except Exception as e:
+                print(f"Warning: PSNR computation failed for frame {i}: {e}")
+
         if ssim_values:
             results['ssim_values'] = ssim_values
             results['ssim_mean'] = float(np.mean(ssim_values))
             results['ssim_std'] = float(np.std(ssim_values))
+            
+        if psnr_values:
+            results['psnr_values'] = psnr_values
+            results['psnr_mean'] = float(np.mean(psnr_values))
+            results['psnr_std'] = float(np.std(psnr_values))
 
     # Compute LPIPS
     if HAS_LPIPS and _lpips_model is not None:

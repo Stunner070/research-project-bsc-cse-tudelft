@@ -6,7 +6,7 @@
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
 #SBATCH --mem-per-cpu=3GB
-#SBATCH --time=01:10:00
+#SBATCH --time=03:50:00
 
 module load 2025
 module load python/3.11.9

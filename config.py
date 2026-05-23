@@ -55,10 +55,11 @@ RETRIEVAL_LABEL_B        = "Adjusted"
 
 # Shared retrieval settings
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results2"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results3"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
+RETRIEVAL_USE_FACE_MODELS     = False             # True = FaceNet/InsightFace ReID, False = SSIM/PSNR Structural Metrics
 RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" | "insightface"
                                                  # "insightface" uses a frozen pretrained recognizer (no training)
 

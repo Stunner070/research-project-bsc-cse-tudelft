@@ -236,88 +236,154 @@ def main():
         seed=42,
     )
 
-    # Embed Dataset A
-    print(f"\n[A] Embedding {config.RETRIEVAL_LABEL_A}...")
-    emb_a = extract_clip_embeddings(
-        manifest_path=config.RETRIEVAL_MANIFEST_A,
-        frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
-        weights_path=config.RETRIEVAL_WEIGHTS_PATH,
-        device=device,
-        batch_size=config.RETRIEVAL_BATCH_SIZE
-    )
-    res_a = evaluate_retrieval(emb_a)
-    print(f"    done. ({res_a['num_gallery']} gallery, {res_a['num_queries']} query clips)")
+    if getattr(config, "RETRIEVAL_USE_FACE_MODELS", True):
+        # Embed Dataset A
+        print(f"\n[A] Embedding {config.RETRIEVAL_LABEL_A}...")
+        emb_a = extract_clip_embeddings(
+            manifest_path=config.RETRIEVAL_MANIFEST_A,
+            frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
+            weights_path=config.RETRIEVAL_WEIGHTS_PATH,
+            device=device,
+            batch_size=config.RETRIEVAL_BATCH_SIZE
+        )
+        res_a = evaluate_retrieval(emb_a)
+        print(f"    done. ({res_a['num_gallery']} gallery, {res_a['num_queries']} query clips)")
 
-    # Embed Dataset B
-    print(f"\n[B] Embedding {config.RETRIEVAL_LABEL_B}...")
-    emb_b = extract_clip_embeddings(
-        manifest_path=config.RETRIEVAL_MANIFEST_B,
-        frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
-        weights_path=config.RETRIEVAL_WEIGHTS_PATH,
-        device=device,
-        batch_size=config.RETRIEVAL_BATCH_SIZE
-    )
-    res_b = evaluate_retrieval(emb_b)
-    print(f"    done. ({res_b['num_gallery']} gallery, {res_b['num_queries']} query clips)")
+        # Embed Dataset B
+        print(f"\n[B] Embedding {config.RETRIEVAL_LABEL_B}...")
+        emb_b = extract_clip_embeddings(
+            manifest_path=config.RETRIEVAL_MANIFEST_B,
+            frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
+            weights_path=config.RETRIEVAL_WEIGHTS_PATH,
+            device=device,
+            batch_size=config.RETRIEVAL_BATCH_SIZE
+        )
+        res_b = evaluate_retrieval(emb_b)
+        print(f"    done. ({res_b['num_gallery']} gallery, {res_b['num_queries']} query clips)")
 
-    d_rank1 = res_b["rank1"] - res_a["rank1"]
-    d_map = res_b["mAP"] - res_a["mAP"]
-    d_asr = res_b["asr"] - res_a["asr"]
+        d_rank1 = res_b["rank1"] - res_a["rank1"]
+        d_map = res_b["mAP"] - res_a["mAP"]
+        d_asr = res_b["asr"] - res_a["asr"]
 
-    print("\n============================================================")
-    print(f"RETRIEVAL EVALUATION — {model_label} | {crop_label} | {temporal_label}")
-    print("============================================================")
-    print(f"{'Metric':<10} {config.RETRIEVAL_LABEL_A:<15} {config.RETRIEVAL_LABEL_B:<15} {'Delta':<15}")
-    print("-" * 60)
-    print(f"{'Rank-1':<10} {res_a['rank1']:<15.4f} {res_b['rank1']:<15.4f} {d_rank1:<15.4f}")
-    print(f"{'mAP':<10} {res_a['mAP']:<15.4f} {res_b['mAP']:<15.4f} {d_map:<15.4f}")
-    print(f"{'ASR':<10} {res_a['asr']:<15.4f} {res_b['asr']:<15.4f} {d_asr:<15.4f}")
-    print(f"{'Num Quer':<10} {res_a['num_queries']:<15} {res_b['num_queries']:<15}")
-    print(f"{'Num Gall':<10} {res_a['num_gallery']:<15} {res_b['num_gallery']:<15}")
-    print(f"{'Num Ids':<10} {res_a['num_identities']:<15} {res_b['num_identities']:<15}")
-    print("============================================================")
-    print("Delta = Adjusted minus Baseline.")
-    print("Negative delta = privacy improvement (less identity leakage).")
-    print("============================================================")
+        print("\n============================================================")
+        print(f"RETRIEVAL EVALUATION — {model_label} | {crop_label} | {temporal_label}")
+        print("============================================================")
+        print(f"{'Metric':<10} {config.RETRIEVAL_LABEL_A:<15} {config.RETRIEVAL_LABEL_B:<15} {'Delta':<15}")
+        print("-" * 60)
+        print(f"{'Rank-1':<10} {res_a['rank1']:<15.4f} {res_b['rank1']:<15.4f} {d_rank1:<15.4f}")
+        print(f"{'mAP':<10} {res_a['mAP']:<15.4f} {res_b['mAP']:<15.4f} {d_map:<15.4f}")
+        print(f"{'ASR':<10} {res_a['asr']:<15.4f} {res_b['asr']:<15.4f} {d_asr:<15.4f}")
+        print(f"{'Num Quer':<10} {res_a['num_queries']:<15} {res_b['num_queries']:<15}")
+        print(f"{'Num Gall':<10} {res_a['num_gallery']:<15} {res_b['num_gallery']:<15}")
+        print(f"{'Num Ids':<10} {res_a['num_identities']:<15} {res_b['num_identities']:<15}")
+        print("============================================================")
+        print("Delta = Adjusted minus Baseline.")
+        print("Negative delta = privacy improvement (less identity leakage).")
+        print("============================================================")
 
-    if hasattr(config, 'RETRIEVAL_OUTPUT_DIR') and config.RETRIEVAL_OUTPUT_DIR is not None:
-        out_dir = Path(config.RETRIEVAL_OUTPUT_DIR)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        res_file = out_dir / "retrieval_results.json"
+        if hasattr(config, 'RETRIEVAL_OUTPUT_DIR') and config.RETRIEVAL_OUTPUT_DIR is not None:
+            out_dir = Path(config.RETRIEVAL_OUTPUT_DIR)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            res_file = out_dir / "retrieval_results.json"
 
-        out_data = {
-            "config": {
-                "model": config.RETRIEVAL_MODEL_NAME,
-                "crop": config.RETRIEVAL_USE_FACE_CROP,
-                "crop_source": config.RETRIEVAL_FACE_CROP_SOURCE,
-                "temporal_mode": config.RETRIEVAL_TEMPORAL_MODE,
-                "num_sample_frames": config.RETRIEVAL_NUM_SAMPLE_FRAMES,
-                "frame_sample_strategy": config.RETRIEVAL_FRAME_SAMPLE_STRATEGY,
-            },
-            "dataset_a": {
-                "label": config.RETRIEVAL_LABEL_A,
-                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_A),
-                "manifest": str(config.RETRIEVAL_MANIFEST_A),
-                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_A),
-            },
-            "dataset_b": {
-                "label": config.RETRIEVAL_LABEL_B,
-                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_B),
-                "manifest": str(config.RETRIEVAL_MANIFEST_B),
-                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_B),
-            },
-            "results_a": res_a,
-            "results_b": res_b,
-            "delta": {
-                "rank1": d_rank1,
-                "mAP": d_map,
-                "asr": d_asr
+            out_data = {
+                "config": {
+                    "model": config.RETRIEVAL_MODEL_NAME,
+                    "crop": config.RETRIEVAL_USE_FACE_CROP,
+                    "crop_source": config.RETRIEVAL_FACE_CROP_SOURCE,
+                    "temporal_mode": config.RETRIEVAL_TEMPORAL_MODE,
+                    "num_sample_frames": config.RETRIEVAL_NUM_SAMPLE_FRAMES,
+                    "frame_sample_strategy": config.RETRIEVAL_FRAME_SAMPLE_STRATEGY,
+                },
+                "dataset_a": {
+                    "label": config.RETRIEVAL_LABEL_A,
+                    "v2e_root": str(config.RETRIEVAL_V2E_ROOT_A),
+                    "manifest": str(config.RETRIEVAL_MANIFEST_A),
+                    "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_A),
+                },
+                "dataset_b": {
+                    "label": config.RETRIEVAL_LABEL_B,
+                    "v2e_root": str(config.RETRIEVAL_V2E_ROOT_B),
+                    "manifest": str(config.RETRIEVAL_MANIFEST_B),
+                    "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_B),
+                },
+                "results_a": res_a,
+                "results_b": res_b,
+                "delta": {
+                    "rank1": d_rank1,
+                    "mAP": d_map,
+                    "asr": d_asr
+                }
             }
-        }
 
-        with open(res_file, "w") as f:
-            json.dump(out_data, f, indent=4)
-        print(f"\nSaved results to {res_file}")
+            with open(res_file, "w") as f:
+                json.dump(out_data, f, indent=4)
+            print(f"\nSaved results to {res_file}")
+
+    else:
+        print("\n[EVAL] Running intrinsic structural metrics (SSIM, PSNR) mode...")
+        from src.utils.metrics import compute_quality_metrics
+        from src.retrieval_eval.embed import load_clip_array, normalize_event_frame, _resolve_npy_path, sample_frame_indices
+
+        df_a = pd.read_csv(config.RETRIEVAL_MANIFEST_A)
+        df_b = pd.read_csv(config.RETRIEVAL_MANIFEST_B)
+
+        ssim_list = []
+        psnr_list = []
+
+        print(f"Processing {len(df_a)} matched clips for structural evaluation...")
+        for i, row_a in df_a.iterrows():
+            vid = row_a["video_id"]
+            # df_b is exactly aligned, but we query by vid to be safe
+            matching_b = df_b[df_b["video_id"] == vid]
+            if len(matching_b) == 0:
+                continue
+            row_b = matching_b.iloc[0]
+            
+            path_a = _resolve_npy_path(row_a, config.RETRIEVAL_FRAMES_ROOT_A)
+            path_b = _resolve_npy_path(row_b, config.RETRIEVAL_FRAMES_ROOT_B)
+            
+            if path_a is None or path_b is None or not path_a.exists() or not path_b.exists():
+                continue
+                
+            arr_a = load_clip_array(path_a)
+            arr_b = load_clip_array(path_b)
+            if arr_a is None or arr_b is None: continue
+            
+            T = min(len(arr_a), len(arr_b))
+            indices = sample_frame_indices(
+                T, 
+                mode=config.RETRIEVAL_TEMPORAL_MODE, 
+                num_samples=config.RETRIEVAL_NUM_SAMPLE_FRAMES, 
+                strategy=config.RETRIEVAL_FRAME_SAMPLE_STRATEGY
+            )
+            
+            frames_a = []
+            frames_b = []
+            for idx in indices:
+                frames_a.append(normalize_event_frame(arr_a[idx]))
+                frames_b.append(normalize_event_frame(arr_b[idx]))
+                
+            metrics = compute_quality_metrics(frames_a, frames_b, device=device)
+            if metrics.get("ssim_values"):
+                ssim_list.extend(metrics["ssim_values"])
+            if metrics.get("psnr_values"):
+                psnr_list.extend(metrics["psnr_values"])
+
+        print("\n============================================================")
+        print(f"STRUCTURAL EVALUATION — {temporal_label}")
+        print("============================================================")
+        if ssim_list:
+            print(f"{'Mean SSIM:':<15} {np.mean(ssim_list):.4f} ± {np.std(ssim_list):.4f}")
+        else:
+            print(f"{'Mean SSIM:':<15} N/A")
+            
+        if psnr_list:
+            print(f"{'Mean PSNR:':<15} {np.mean(psnr_list):.4f} ± {np.std(psnr_list):.4f}")
+        else:
+            print(f"{'Mean PSNR:':<15} N/A")
+        print(f"{'Total Frames:':<15} {len(ssim_list)}")
+        print("============================================================")
 
 if __name__ == "__main__":
     main()
