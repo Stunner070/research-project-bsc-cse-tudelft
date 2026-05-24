@@ -196,7 +196,7 @@ def main():
     model_label, crop_label, temporal_label = _config_summary()
 
     print(f"\n====================================")
-    print(f"Retrieval Evaluation — {model_label} | {crop_label} | {temporal_label}")
+    print(f"Sequential Evaluation — {model_label} | {crop_label} | {temporal_label}")
     print(f"====================================")
 
     # --- Print dataset path info for debugging ---
@@ -229,161 +229,242 @@ def main():
     )
 
     # Align manifests — intersect identities & clips, assign consistent roles
-    align_manifests(
+    df_a, df_b = align_manifests(
         manifest_a=Path(config.RETRIEVAL_MANIFEST_A),
         manifest_b=Path(config.RETRIEVAL_MANIFEST_B),
         min_clips_per_identity=2,
         seed=42,
     )
 
-    if getattr(config, "RETRIEVAL_USE_FACE_MODELS", True):
-        # Embed Dataset A
-        print(f"\n[A] Embedding {config.RETRIEVAL_LABEL_A}...")
-        emb_a = extract_clip_embeddings(
-            manifest_path=config.RETRIEVAL_MANIFEST_A,
-            frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
-            weights_path=config.RETRIEVAL_WEIGHTS_PATH,
-            device=device,
-            batch_size=config.RETRIEVAL_BATCH_SIZE
+    # =======================================================================
+    # PHASE 1: INTRINSIC STRUCTURAL EVALUATION
+    # =======================================================================
+    print("\n[PHASE 1] Running intrinsic structural metrics (SSIM, PSNR)...")
+    from src.utils.metrics import compute_quality_metrics
+    from src.retrieval_eval.embed import load_clip_array, normalize_event_frame, _resolve_npy_path, sample_frame_indices
+
+    id_col = "identity_id" if "identity_id" in df_a.columns else (
+        "identity" if "identity" in df_a.columns else "video_id"
+    )
+
+    phase1_metrics = []
+    ssim_list = []
+    psnr_list = []
+
+    print(f"Processing {len(df_a)} matched clips for structural evaluation...")
+    for i, row_a in df_a.iterrows():
+        vid = row_a["video_id"]
+        role = row_a["role"]
+        iid = row_a[id_col]
+        
+        matching_b = df_b[df_b["video_id"] == vid]
+        if len(matching_b) == 0:
+            continue
+        row_b = matching_b.iloc[0]
+        
+        path_a = _resolve_npy_path(row_a, config.RETRIEVAL_FRAMES_ROOT_A)
+        path_b = _resolve_npy_path(row_b, config.RETRIEVAL_FRAMES_ROOT_B)
+        
+        if path_a is None or path_b is None or not path_a.exists() or not path_b.exists():
+            continue
+            
+        arr_a = load_clip_array(path_a)
+        arr_b = load_clip_array(path_b)
+        if arr_a is None or arr_b is None: continue
+        
+        T = min(len(arr_a), len(arr_b))
+        indices = sample_frame_indices(
+            T, 
+            mode=config.RETRIEVAL_TEMPORAL_MODE, 
+            num_samples=config.RETRIEVAL_NUM_SAMPLE_FRAMES, 
+            strategy=config.RETRIEVAL_FRAME_SAMPLE_STRATEGY
         )
-        res_a = evaluate_retrieval(emb_a)
-        print(f"    done. ({res_a['num_gallery']} gallery, {res_a['num_queries']} query clips)")
+        
+        frames_a = []
+        frames_b = []
+        for idx in indices:
+            frames_a.append(normalize_event_frame(arr_a[idx]))
+            frames_b.append(normalize_event_frame(arr_b[idx]))
+            
+        metrics = compute_quality_metrics(frames_a, frames_b, device=device)
+        
+        clip_ssim = metrics.get("ssim_mean", np.nan)
+        clip_psnr = metrics.get("psnr_mean", np.nan)
+        
+        if metrics.get("ssim_values"):
+            ssim_list.extend(metrics["ssim_values"])
+        if metrics.get("psnr_values"):
+            psnr_list.extend(metrics["psnr_values"])
+            
+        phase1_metrics.append({
+            "clip_id": vid,
+            "identity_id": iid,
+            "is_query": role == "query",
+            "ssim": clip_ssim,
+            "psnr": clip_psnr
+        })
 
-        # Embed Dataset B
-        print(f"\n[B] Embedding {config.RETRIEVAL_LABEL_B}...")
-        emb_b = extract_clip_embeddings(
-            manifest_path=config.RETRIEVAL_MANIFEST_B,
-            frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
-            weights_path=config.RETRIEVAL_WEIGHTS_PATH,
-            device=device,
-            batch_size=config.RETRIEVAL_BATCH_SIZE
-        )
-        res_b = evaluate_retrieval(emb_b)
-        print(f"    done. ({res_b['num_gallery']} gallery, {res_b['num_queries']} query clips)")
-
-        d_rank1 = res_b["rank1"] - res_a["rank1"]
-        d_map = res_b["mAP"] - res_a["mAP"]
-        d_asr = res_b["asr"] - res_a["asr"]
-
-        print("\n============================================================")
-        print(f"RETRIEVAL EVALUATION — {model_label} | {crop_label} | {temporal_label}")
-        print("============================================================")
-        print(f"{'Metric':<10} {config.RETRIEVAL_LABEL_A:<15} {config.RETRIEVAL_LABEL_B:<15} {'Delta':<15}")
-        print("-" * 60)
-        print(f"{'Rank-1':<10} {res_a['rank1']:<15.4f} {res_b['rank1']:<15.4f} {d_rank1:<15.4f}")
-        print(f"{'mAP':<10} {res_a['mAP']:<15.4f} {res_b['mAP']:<15.4f} {d_map:<15.4f}")
-        print(f"{'ASR':<10} {res_a['asr']:<15.4f} {res_b['asr']:<15.4f} {d_asr:<15.4f}")
-        print(f"{'Num Quer':<10} {res_a['num_queries']:<15} {res_b['num_queries']:<15}")
-        print(f"{'Num Gall':<10} {res_a['num_gallery']:<15} {res_b['num_gallery']:<15}")
-        print(f"{'Num Ids':<10} {res_a['num_identities']:<15} {res_b['num_identities']:<15}")
-        print("============================================================")
-        print("Delta = Adjusted minus Baseline.")
-        print("Negative delta = privacy improvement (less identity leakage).")
-        print("============================================================")
-
-        if hasattr(config, 'RETRIEVAL_OUTPUT_DIR') and config.RETRIEVAL_OUTPUT_DIR is not None:
-            out_dir = Path(config.RETRIEVAL_OUTPUT_DIR)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            res_file = out_dir / "retrieval_results.json"
-
-            out_data = {
-                "config": {
-                    "model": config.RETRIEVAL_MODEL_NAME,
-                    "crop": config.RETRIEVAL_USE_FACE_CROP,
-                    "crop_source": config.RETRIEVAL_FACE_CROP_SOURCE,
-                    "temporal_mode": config.RETRIEVAL_TEMPORAL_MODE,
-                    "num_sample_frames": config.RETRIEVAL_NUM_SAMPLE_FRAMES,
-                    "frame_sample_strategy": config.RETRIEVAL_FRAME_SAMPLE_STRATEGY,
-                },
-                "dataset_a": {
-                    "label": config.RETRIEVAL_LABEL_A,
-                    "v2e_root": str(config.RETRIEVAL_V2E_ROOT_A),
-                    "manifest": str(config.RETRIEVAL_MANIFEST_A),
-                    "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_A),
-                },
-                "dataset_b": {
-                    "label": config.RETRIEVAL_LABEL_B,
-                    "v2e_root": str(config.RETRIEVAL_V2E_ROOT_B),
-                    "manifest": str(config.RETRIEVAL_MANIFEST_B),
-                    "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_B),
-                },
-                "results_a": res_a,
-                "results_b": res_b,
-                "delta": {
-                    "rank1": d_rank1,
-                    "mAP": d_map,
-                    "asr": d_asr
-                }
-            }
-
-            with open(res_file, "w") as f:
-                json.dump(out_data, f, indent=4)
-            print(f"\nSaved results to {res_file}")
-
+    print("\n============================================================")
+    print(f"STRUCTURAL EVALUATION — {temporal_label}")
+    print("============================================================")
+    if ssim_list:
+        print(f"{'Mean SSIM:':<15} {np.mean(ssim_list):.4f} ± {np.std(ssim_list):.4f}")
     else:
-        print("\n[EVAL] Running intrinsic structural metrics (SSIM, PSNR) mode...")
-        from src.utils.metrics import compute_quality_metrics
-        from src.retrieval_eval.embed import load_clip_array, normalize_event_frame, _resolve_npy_path, sample_frame_indices
+        print(f"{'Mean SSIM:':<15} N/A")
+        
+    if psnr_list:
+        print(f"{'Mean PSNR:':<15} {np.mean(psnr_list):.4f} ± {np.std(psnr_list):.4f}")
+    else:
+        print(f"{'Mean PSNR:':<15} N/A")
+    print(f"{'Total Frames:':<15} {len(ssim_list)}")
+    print("============================================================")
 
-        df_a = pd.read_csv(config.RETRIEVAL_MANIFEST_A)
-        df_b = pd.read_csv(config.RETRIEVAL_MANIFEST_B)
 
-        ssim_list = []
-        psnr_list = []
+    # =======================================================================
+    # PHASE 2: E2VID RECONSTRUCTION ATTACK EVALUATION
+    # =======================================================================
+    print("\n[PHASE 2] Running retrieval metrics (FaceNet on E2VID reconstruction)...")
+    
+    # Temporarily override pipeline mode for Phase 2 dynamic reconstruction
+    original_mode = getattr(config, "RETRIEVAL_PIPELINE_MODE", "RAW_NPY")
+    config.RETRIEVAL_PIPELINE_MODE = "E2VID"
+    
+    # Embed Dataset A
+    print(f"\n[A] Embedding {config.RETRIEVAL_LABEL_A}...")
+    emb_a = extract_clip_embeddings(
+        manifest_path=config.RETRIEVAL_MANIFEST_A,
+        frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
+        v2e_root=config.RETRIEVAL_V2E_ROOT_A,
+        weights_path=config.RETRIEVAL_WEIGHTS_PATH,
+        device=device,
+        batch_size=config.RETRIEVAL_BATCH_SIZE
+    )
+    res_a = evaluate_retrieval(emb_a)
+    print(f"    done. ({res_a['num_gallery']} gallery, {res_a['num_queries']} query clips)")
 
-        print(f"Processing {len(df_a)} matched clips for structural evaluation...")
-        for i, row_a in df_a.iterrows():
-            vid = row_a["video_id"]
-            # df_b is exactly aligned, but we query by vid to be safe
-            matching_b = df_b[df_b["video_id"] == vid]
-            if len(matching_b) == 0:
-                continue
-            row_b = matching_b.iloc[0]
-            
-            path_a = _resolve_npy_path(row_a, config.RETRIEVAL_FRAMES_ROOT_A)
-            path_b = _resolve_npy_path(row_b, config.RETRIEVAL_FRAMES_ROOT_B)
-            
-            if path_a is None or path_b is None or not path_a.exists() or not path_b.exists():
-                continue
-                
-            arr_a = load_clip_array(path_a)
-            arr_b = load_clip_array(path_b)
-            if arr_a is None or arr_b is None: continue
-            
-            T = min(len(arr_a), len(arr_b))
-            indices = sample_frame_indices(
-                T, 
-                mode=config.RETRIEVAL_TEMPORAL_MODE, 
-                num_samples=config.RETRIEVAL_NUM_SAMPLE_FRAMES, 
-                strategy=config.RETRIEVAL_FRAME_SAMPLE_STRATEGY
-            )
-            
-            frames_a = []
-            frames_b = []
-            for idx in indices:
-                frames_a.append(normalize_event_frame(arr_a[idx]))
-                frames_b.append(normalize_event_frame(arr_b[idx]))
-                
-            metrics = compute_quality_metrics(frames_a, frames_b, device=device)
-            if metrics.get("ssim_values"):
-                ssim_list.extend(metrics["ssim_values"])
-            if metrics.get("psnr_values"):
-                psnr_list.extend(metrics["psnr_values"])
+    # Embed Dataset B
+    print(f"\n[B] Embedding {config.RETRIEVAL_LABEL_B}...")
+    emb_b = extract_clip_embeddings(
+        manifest_path=config.RETRIEVAL_MANIFEST_B,
+        frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
+        v2e_root=config.RETRIEVAL_V2E_ROOT_B,
+        weights_path=config.RETRIEVAL_WEIGHTS_PATH,
+        device=device,
+        batch_size=config.RETRIEVAL_BATCH_SIZE
+    )
+    res_b = evaluate_retrieval(emb_b)
+    print(f"    done. ({res_b['num_gallery']} gallery, {res_b['num_queries']} query clips)")
 
-        print("\n============================================================")
-        print(f"STRUCTURAL EVALUATION — {temporal_label}")
-        print("============================================================")
-        if ssim_list:
-            print(f"{'Mean SSIM:':<15} {np.mean(ssim_list):.4f} ± {np.std(ssim_list):.4f}")
-        else:
-            print(f"{'Mean SSIM:':<15} N/A")
-            
-        if psnr_list:
-            print(f"{'Mean PSNR:':<15} {np.mean(psnr_list):.4f} ± {np.std(psnr_list):.4f}")
-        else:
-            print(f"{'Mean PSNR:':<15} N/A")
-        print(f"{'Total Frames:':<15} {len(ssim_list)}")
-        print("============================================================")
+    # Cross-Dataset Evaluation
+    print(f"\n[CROSS-SET] Evaluating {config.RETRIEVAL_LABEL_B} queries vs {config.RETRIEVAL_LABEL_A} gallery...")
+    emb_cross = {
+        "query": emb_b["query"],
+        "gallery": emb_a["gallery"]
+    }
+    res_cross = evaluate_retrieval(emb_cross)
+    print(f"    done. ({res_cross['num_gallery']} gallery, {res_cross['num_queries']} query clips)")
+
+    # Restore mode
+    config.RETRIEVAL_PIPELINE_MODE = original_mode
+
+    d_rank1 = res_cross["rank1"] - res_a["rank1"]
+    d_map = res_cross["mAP"] - res_a["mAP"]
+    d_asr = res_cross["asr"] - res_a["asr"]
+
+    print("\n============================================================")
+    print(f"RETRIEVAL EVALUATION — {model_label} | {crop_label} | {temporal_label}")
+    print("============================================================")
+    print(f"{'Metric':<10} {'Baseline (A)':<15} {'Cross-Attack':<15} {'Delta':<15}")
+    print("-" * 60)
+    print(f"{'Rank-1':<10} {res_a['rank1']:<15.4f} {res_cross['rank1']:<15.4f} {d_rank1:<15.4f}")
+    print(f"{'mAP':<10} {res_a['mAP']:<15.4f} {res_cross['mAP']:<15.4f} {d_map:<15.4f}")
+    print(f"{'ASR':<10} {res_a['asr']:<15.4f} {res_cross['asr']:<15.4f} {d_asr:<15.4f}")
+    print(f"{'Num Quer':<10} {res_a['num_queries']:<15} {res_cross['num_queries']:<15}")
+    print(f"{'Num Gall':<10} {res_a['num_gallery']:<15} {res_cross['num_gallery']:<15}")
+    print(f"{'Num Ids':<10} {res_a['num_identities']:<15} {res_cross['num_identities']:<15}")
+    print("============================================================")
+    print("Delta = Cross-Attack minus Baseline.")
+    print("Negative delta = privacy improvement (less identity leakage).")
+    print("============================================================")
+
+    if hasattr(config, 'RETRIEVAL_OUTPUT_DIR') and config.RETRIEVAL_OUTPUT_DIR is not None:
+        out_dir = Path(config.RETRIEVAL_OUTPUT_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        res_file = out_dir / "retrieval_results.json"
+
+        out_data = {
+            "config": {
+                "model": config.RETRIEVAL_MODEL_NAME,
+                "crop": config.RETRIEVAL_USE_FACE_CROP,
+                "crop_source": config.RETRIEVAL_FACE_CROP_SOURCE,
+                "temporal_mode": config.RETRIEVAL_TEMPORAL_MODE,
+                "num_sample_frames": config.RETRIEVAL_NUM_SAMPLE_FRAMES,
+                "frame_sample_strategy": config.RETRIEVAL_FRAME_SAMPLE_STRATEGY,
+            },
+            "dataset_a": {
+                "label": config.RETRIEVAL_LABEL_A,
+                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_A),
+                "manifest": str(config.RETRIEVAL_MANIFEST_A),
+                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_A),
+            },
+            "dataset_b": {
+                "label": config.RETRIEVAL_LABEL_B,
+                "v2e_root": str(config.RETRIEVAL_V2E_ROOT_B),
+                "manifest": str(config.RETRIEVAL_MANIFEST_B),
+                "frames_root": str(config.RETRIEVAL_FRAMES_ROOT_B),
+            },
+            "results_a": res_a,
+            "results_b": res_b,
+            "results_cross": res_cross,
+            "delta": {
+                "rank1": d_rank1,
+                "mAP": d_map,
+                "asr": d_asr
+            }
+        }
+
+        with open(res_file, "w") as f:
+            json.dump(out_data, f, indent=4)
+        print(f"Saved global JSON results to {res_file}")
+
+    # =======================================================================
+    # PHASE 3: AGGREGATE & EXPORT DETAILED RAW METRICS
+    # =======================================================================
+    print("\n[PHASE 3] Aggregating raw metrics and exporting to CSV...")
+    
+    # Convert Phase 1 structural metrics to a DataFrame
+    df_metrics = pd.DataFrame(phase1_metrics)
+    
+    # Convert Phase 2 query results for Dataset B (Cross-Attack) into a DataFrame
+    df_query_b = pd.DataFrame(res_cross.get("query_results", []))
+    
+    if not df_metrics.empty and not df_query_b.empty:
+        # Merge structural metrics and query retrieval metrics on clip_id = video_id
+        df_query_b = df_query_b.rename(columns={"video_id": "clip_id"})
+        df_final = pd.merge(df_metrics, df_query_b, on="clip_id", how="left")
+    else:
+        df_final = df_metrics.copy()
+        if "rank1_success" not in df_final.columns:
+            df_final["rank1_success"] = np.nan
+        if "average_precision" not in df_final.columns:
+            df_final["average_precision"] = np.nan
+        
+    # Reorder columns as requested
+    cols = ["clip_id", "identity_id", "ssim", "psnr", "is_query", "rank1_success", "average_precision"]
+    # Add any extra columns that might exist but keep core columns first
+    for c in df_final.columns:
+        if c not in cols:
+            cols.append(c)
+    df_final = df_final[cols]
+    
+    # Save to CSV
+    run_name = getattr(config, "RETRIEVAL_RUN_NAME", "default_run")
+    out_dir = Path(config.RETRIEVAL_OUTPUT_DIR) if getattr(config, "RETRIEVAL_OUTPUT_DIR", None) else Path("retrieval_results")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    
+    out_csv = out_dir / f"raw_metrics_{run_name}.csv"
+    df_final.to_csv(out_csv, index=False)
+    print(f"Successfully saved {len(df_final)} clip records to: {out_csv}\n")
 
 if __name__ == "__main__":
     main()

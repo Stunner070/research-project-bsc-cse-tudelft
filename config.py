@@ -34,7 +34,9 @@ MODIFIED_QUERY_DIR = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")  # Pat
 
 # ─── Retrieval Evaluation Pipeline Only (no-training) ────────────────────────
 # Dataset A (Baseline) — source and output roots
-RETRIEVAL_V2E_ROOT_A     = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")     # V2E source root for baseline
+# RETRIEVAL_V2E_ROOT_A     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/baseline_346")    # V2E source root for baseline
+RETRIEVAL_V2E_ROOT_A = Path("/scratch/sofyanali/voxceleb/dev/baseline_346")
+# RETRIEVAL_WORK_DIR_A     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/output_baseline")  # Derived-output root for baseline
 RETRIEVAL_WORK_DIR_A     = Path("/scratch/sofyanali/voxceleb/dev/output_baseline")  # Derived-output root for baseline
 
 # Dataset A — derived paths (built from roots above)
@@ -44,27 +46,30 @@ RETRIEVAL_MANIFEST_A     = RETRIEVAL_MANIFEST_DIR_A / "manifest_enriched.csv"
 RETRIEVAL_LABEL_A        = "Baseline"
 
 # Dataset B (Adjusted) — source and output roots
-RETRIEVAL_V2E_ROOT_B     = Path("/scratch/sofyanali/voxceleb/dev/leak_5")     # V2E source root for adjusted
-RETRIEVAL_WORK_DIR_B     = Path("/scratch/sofyanali/voxceleb/dev/output_leak_5")  # Derived-output root for adjusted
+# RETRIEVAL_V2E_ROOT_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/leak_5")     # V2E source root for adjusted
+RETRIEVAL_V2E_ROOT_B = Path("/scratch/sofyanali/voxceleb/dev/leak_5")
+# RETRIEVAL_WORK_DIR_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/output_leak_5")  # Derived-output root for adjusted
+RETRIEVAL_WORK_DIR_B = Path("/scratch/sofyanali/voxceleb/dev/output_leak_5")  # Derived-output root for adjusted
 
 # Dataset B — derived paths (built from roots above)
 RETRIEVAL_MANIFEST_DIR_B = RETRIEVAL_WORK_DIR_B / "manifests"
 RETRIEVAL_FRAMES_ROOT_B  = RETRIEVAL_WORK_DIR_B / "frames"
 RETRIEVAL_MANIFEST_B     = RETRIEVAL_MANIFEST_DIR_B / "manifest_enriched.csv"
-RETRIEVAL_LABEL_B        = "Adjusted"
+RETRIEVAL_LABEL_B        = "leak_5"
 
 # Shared retrieval settings
+RETRIEVAL_PIPELINE_MODE  = "RAW_NPY"    # "RAW_NPY" (pre-computed .npy) | "E2VID" (dynamic reconstruct)
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results4"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_leak_5"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
-RETRIEVAL_USE_FACE_MODELS     = False             # True = FaceNet/InsightFace ReID, False = SSIM/PSNR Structural Metrics
+RETRIEVAL_USE_FACE_MODELS     = True            # True = FaceNet/InsightFace ReID, False = SSIM/PSNR Structural Metrics
 RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" | "insightface"
                                                  # "insightface" uses a frozen pretrained recognizer (no training)
 
 # ─── Face Cropping Settings ──────────────────────────────────────────────────
-RETRIEVAL_USE_FACE_CROP       = True             # True = crop face region before embedding extraction
+RETRIEVAL_USE_FACE_CROP       = False            # True = crop face region before embedding extraction
 RETRIEVAL_FACE_CROP_SOURCE    = "annotation"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
 RETRIEVAL_FACE_CROP_MARGIN    = 0.15             # Fractional margin to expand around the detected/annotated bbox
 RETRIEVAL_MIN_FACE_SIZE       = 20               # Reject face crops smaller than this in pixels (width or height)
@@ -75,7 +80,7 @@ RETRIEVAL_ANNOTATION_FALLBACK = "median"         # Missing frame fallback: "near
 
 # ─── Temporal Sampling Settings ──────────────────────────────────────────────
 RETRIEVAL_TEMPORAL_MODE       = "multi_average"         # Frame selection: "center" (single T//2) | "multi_average"
-RETRIEVAL_NUM_SAMPLE_FRAMES   = 5                # Number of frames to sample when mode is "multi_average"
+RETRIEVAL_NUM_SAMPLE_FRAMES   = 5               # Number of frames to sample when mode is "multi_average"
 RETRIEVAL_FRAME_SAMPLE_STRATEGY = "uniform"      # Sampling strategy: "uniform" (evenly spaced) | "center_window"
 
 # ─── InsightFace-specific Settings (frozen inference only) ───────────────────
@@ -87,3 +92,6 @@ RETRIEVAL_INSIGHTFACE_DET_SIZE = (320, 320)               # Detector input resol
 RETRIEVAL_SAVE_DEBUG_CROPS     = False                          # Save example crops for visual inspection
 RETRIEVAL_DEBUG_CROP_DIR       = WORK_DIR / "retrieval_debug_crops"  # Output directory for debug crops
 RETRIEVAL_DEBUG_CROP_MAX       = 50                             # Max number of debug crops saved per run
+
+# ─── Evaluation Run ──────────────────────────────────────────────────────────
+RETRIEVAL_RUN_NAME             = "leak_5"                       # Name used to export the CSV file with raw metrics

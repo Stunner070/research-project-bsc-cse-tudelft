@@ -32,6 +32,10 @@ def evaluate_retrieval(embeddings_dict):
 
     rank1_correct = 0
     aps = []
+    query_results = []
+    
+    # We must have the same number of queries as query video_ids
+    q_vids = embeddings_dict["query"].get("video_ids", ["unknown"] * num_queries)
 
     for i in range(num_queries):
         q_id = q_ids[i]
@@ -43,9 +47,15 @@ def evaluate_retrieval(embeddings_dict):
         correct_matches = (ranked_g_ids == q_id)
         if not np.any(correct_matches):
             aps.append(0.0)
+            query_results.append({
+                "video_id": q_vids[i],
+                "rank1_success": 0,
+                "average_precision": 0.0
+            })
             continue
 
-        if correct_matches[0]:
+        is_rank1 = 1 if correct_matches[0] else 0
+        if is_rank1:
             rank1_correct += 1
 
         correct_so_far = 0
@@ -54,7 +64,15 @@ def evaluate_retrieval(embeddings_dict):
             if is_correct:
                 correct_so_far += 1
                 precisions.append(correct_so_far / (k + 1.0))
-        aps.append(np.mean(precisions))
+                
+        ap = np.mean(precisions) if len(precisions) > 0 else 0.0
+        aps.append(ap)
+        
+        query_results.append({
+            "video_id": q_vids[i],
+            "rank1_success": is_rank1,
+            "average_precision": ap
+        })
 
     rank1 = float(rank1_correct / num_queries) if num_queries > 0 else 0.0
     mAP = float(np.mean(aps)) if len(aps) > 0 else 0.0
@@ -65,6 +83,7 @@ def evaluate_retrieval(embeddings_dict):
         "asr": rank1,
         "num_queries": num_queries,
         "num_gallery": num_gallery,
-        "num_identities": unique_ids
+        "num_identities": unique_ids,
+        "query_results": query_results
     }
 

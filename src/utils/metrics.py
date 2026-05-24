@@ -196,10 +196,13 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
         'has_ssim': HAS_SKIMAGE, 'has_psnr': HAS_SKIMAGE, 'has_lpips': HAS_LPIPS and _lpips_model is not None
     }
 
-    if not HAS_SKIMAGE:
+    global _warned_skimage, _warned_lpips
+    if not HAS_SKIMAGE and not globals().get('_warned_skimage', False):
         print("Warning: skimage not installed, skipping SSIM computation")
-    if not HAS_LPIPS or _lpips_model is None:
+        globals()['_warned_skimage'] = True
+    if (not HAS_LPIPS or _lpips_model is None) and not globals().get('_warned_lpips', False):
         print("Warning: lpips not properly initialized, skipping LPIPS computation")
+        globals()['_warned_lpips'] = True
 
     # Convert frames to tensors if needed
     if isinstance(original_frames, list):
@@ -251,6 +254,10 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
             orig_np = np.clip(orig_np, 0, 1)
             mod_np = np.clip(mod_np, 0, 1)
 
+            # Temporary debug check inside the loop
+            if np.array_equal(orig_np, mod_np):
+                print(f"WARNING: Baseline and Adjusted frames are perfectly identical at index {i}!")
+
             try:
                 val = ssim(orig_np, mod_np, data_range=1.0)
                 ssim_values.append(float(val))
@@ -259,6 +266,8 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
 
             try:
                 val_psnr = psnr(orig_np, mod_np, data_range=1.0)
+                if np.isinf(val_psnr):
+                    val_psnr = 60.0  # Cap PSNR to 60 dB to prevent skewing statistical distribution
                 psnr_values.append(float(val_psnr))
             except Exception as e:
                 print(f"Warning: PSNR computation failed for frame {i}: {e}")
@@ -293,6 +302,7 @@ def compute_quality_metrics(original_frames, modified_frames, device='cpu', face
         mod_norm = mod_norm.to(device)
 
         try:
+            _lpips_model.to(device)
             with torch.no_grad():
                 distances = _lpips_model(orig_norm, mod_norm)
             lpips_values = distances.squeeze().cpu().numpy()

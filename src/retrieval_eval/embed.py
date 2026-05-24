@@ -21,7 +21,6 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import config as cfg
-from src.models.facenet_reid import FaceNetReID
 
 # ---------------------------------------------------------------------------
 # Lazy InsightFace import — only loaded when actually needed
@@ -381,6 +380,7 @@ def build_embedding_backend(device: str) -> Dict[str, Any]:
     name = cfg.RETRIEVAL_MODEL_NAME
 
     if name == "facenet":
+        from src.models.facenet_reid import FaceNetReID
         model = FaceNetReID(num_classes=1).to(device)
         w_path = Path(cfg.RETRIEVAL_WEIGHTS_PATH)
         if w_path.exists():
@@ -666,6 +666,7 @@ def extract_clip_embeddings(
     weights_path,
     device,
     batch_size: int = 32,
+    v2e_root = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Extract gallery and query embeddings for every clip in the manifest.
 
@@ -735,6 +736,7 @@ def extract_clip_embeddings(
         backend["name"] == "facenet"
         and cfg.RETRIEVAL_TEMPORAL_MODE == "center"
         and not cfg.RETRIEVAL_USE_FACE_CROP
+        and getattr(cfg, "RETRIEVAL_PIPELINE_MODE", "RAW_NPY") == "RAW_NPY"
     )
 
     if use_fast_path:
@@ -796,18 +798,51 @@ def extract_clip_embeddings(
             iid = row[id_col]
             role = row["role"]
 
-            npy_path = _resolve_npy_path(row, frames_root)
-            if npy_path is None or not npy_path.exists():
-                print(f"[SKIP] {vid}: file not found at {npy_path}")
-                skipped += 1
-                continue
+            pipeline_mode = getattr(cfg, "RETRIEVAL_PIPELINE_MODE", "RAW_NPY")
+            arr = None
 
-            arr = load_clip_array(npy_path)
-            if arr is None or arr.shape[0] == 0:
-                if arr is not None:
-                    print(f"[SKIP] {vid}: empty array")
-                skipped += 1
-                continue
+            if pipeline_mode == "E2VID":
+                import e2vid_config
+                if e2vid_config.E2VID_REPO_PATH not in sys.path:
+                    sys.path.append(e2vid_config.E2VID_REPO_PATH)
+                
+                try:
+                    from api import reconstruct_h5_to_memory
+                except ImportError as e:
+                    print(f"[ERROR] Could not import E2VID api. Make sure E2VID_REPO_PATH is correct. ({e})")
+                    break
+
+                h5_path = Path(v2e_root) / vid / "events.h5"
+                if not h5_path.exists():
+                    print(f"[SKIP] {vid}: events.h5 not found at {h5_path}")
+                    skipped += 1
+                    continue
+
+                try:
+                    frames_list = reconstruct_h5_to_memory(str(h5_path), e2vid_config.E2VID_MODEL_PATH, e2vid_config.config_dict)
+                    if not frames_list:
+                        print(f"[SKIP] {vid}: E2VID returned empty frame list")
+                        skipped += 1
+                        continue
+                    arr = np.stack(frames_list)
+                except Exception as e:
+                    print(f"[SKIP] {vid}: E2VID reconstruction failed ({e})")
+                    skipped += 1
+                    continue
+
+            else:
+                npy_path = _resolve_npy_path(row, frames_root)
+                if npy_path is None or not npy_path.exists():
+                    print(f"[SKIP] {vid}: file not found at {npy_path}")
+                    skipped += 1
+                    continue
+
+                arr = load_clip_array(npy_path)
+                if arr is None or arr.shape[0] == 0:
+                    if arr is not None:
+                        print(f"[SKIP] {vid}: empty array")
+                    skipped += 1
+                    continue
 
             emb = extract_clip_embedding(arr, backend, row=row, vid=vid, h5_file=h5_file)
             if emb is None:
