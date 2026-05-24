@@ -12,6 +12,19 @@ module load 2025
 module load python/3.11.9
 module load py-scikit-learn
 
+pip install \
+  opencv-python \
+  albumentations \
+  tensorboard \
+  imageio-ffmpeg \
+  av \
+  lpips \
+  einops \
+  facenet-pytorch \
+  insightface \
+  onnxruntime-gpu \
+  onnx
+  
 . /scratch/sofyanali/.venv/bin/activate
 
 
