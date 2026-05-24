@@ -10,6 +10,7 @@
 
 module load 2025
 module load python/3.11.9
+module load py-scikit-learn
 
 . /scratch/sofyanali/.venv/bin/activate
 
