@@ -60,7 +60,7 @@ RETRIEVAL_LABEL_B        = "leak_5"
 # Shared retrieval settings
 RETRIEVAL_PIPELINE_MODE  = "RAW_NPY"    # "RAW_NPY" (pre-computed .npy) | "E2VID" (dynamic reconstruct)
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_leak_5_cropping"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_leak5"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
@@ -69,7 +69,7 @@ RETRIEVAL_MODEL_NAME          = "facenet"        # Embedding backend: "facenet" 
                                                  # "insightface" uses a frozen pretrained recognizer (no training)
 
 # ─── Face Cropping Settings ──────────────────────────────────────────────────
-RETRIEVAL_USE_FACE_CROP       = True            # True = crop face region before embedding extraction
+RETRIEVAL_USE_FACE_CROP       = False            # True = crop face region before embedding extraction
 RETRIEVAL_FACE_CROP_SOURCE    = "annotation"     # Crop source: "annotation" (manifest bbox) | "insightface" (detector)
 RETRIEVAL_FACE_CROP_MARGIN    = 0.15             # Fractional margin to expand around the detected/annotated bbox
 RETRIEVAL_MIN_FACE_SIZE       = 20               # Reject face crops smaller than this in pixels (width or height)
@@ -94,4 +94,4 @@ RETRIEVAL_DEBUG_CROP_DIR       = WORK_DIR / "retrieval_debug_crops"  # Output di
 RETRIEVAL_DEBUG_CROP_MAX       = 50                             # Max number of debug crops saved per run
 
 # ─── Evaluation Run ──────────────────────────────────────────────────────────
-RETRIEVAL_RUN_NAME             = "leak_5_cropping"                       # Name used to export the CSV file with raw metrics
+RETRIEVAL_RUN_NAME             = "leak_5"                       # Name used to export the CSV file with raw metrics
