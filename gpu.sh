@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=testrun_resolution_640
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu-a100
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
