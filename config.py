@@ -47,20 +47,20 @@ RETRIEVAL_LABEL_A        = "Baseline"
 
 # Dataset B (Adjusted) — source and output roots
 # RETRIEVAL_V2E_ROOT_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/leak_5")     # V2E source root for adjusted
-RETRIEVAL_V2E_ROOT_B = Path("/scratch/sofyanali/voxceleb/dev/leak_5")
+RETRIEVAL_V2E_ROOT_B = Path("/scratch/sofyanali/voxceleb/dev/resolution_640")
 # RETRIEVAL_WORK_DIR_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/output_leak_5")  # Derived-output root for adjusted
-RETRIEVAL_WORK_DIR_B = Path("/scratch/sofyanali/voxceleb/dev/output_leak_5")  # Derived-output root for adjusted
+RETRIEVAL_WORK_DIR_B = Path("/scratch/sofyanali/voxceleb/dev/output_resolution_640")  # Derived-output root for adjusted
 
 # Dataset B — derived paths (built from roots above)
 RETRIEVAL_MANIFEST_DIR_B = RETRIEVAL_WORK_DIR_B / "manifests"
 RETRIEVAL_FRAMES_ROOT_B  = RETRIEVAL_WORK_DIR_B / "frames"
 RETRIEVAL_MANIFEST_B     = RETRIEVAL_MANIFEST_DIR_B / "manifest_enriched.csv"
-RETRIEVAL_LABEL_B        = "leak_5"
+RETRIEVAL_LABEL_B        = "resolution_640"
 
 # Shared retrieval settings
 RETRIEVAL_PIPELINE_MODE  = "RAW_NPY"    # "RAW_NPY" (pre-computed .npy) | "E2VID" (dynamic reconstruct)
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_leak_5_2"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_resolution_640"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
@@ -94,4 +94,4 @@ RETRIEVAL_DEBUG_CROP_DIR       = WORK_DIR / "retrieval_debug_crops"  # Output di
 RETRIEVAL_DEBUG_CROP_MAX       = 50                             # Max number of debug crops saved per run
 
 # ─── Evaluation Run ──────────────────────────────────────────────────────────
-RETRIEVAL_RUN_NAME             = "leak_5_2"                       # Name used to export the CSV file with raw metrics
+RETRIEVAL_RUN_NAME             = "resolution_640"                       # Name used to export the CSV file with raw metrics
