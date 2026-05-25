@@ -12,7 +12,7 @@ module load 2025
 module load python/3.11.9
 module load py-scikit-learn
 
-pip install \
+srun python -m pip install \
   opencv-python \
   albumentations \
   tensorboard \
@@ -23,7 +23,8 @@ pip install \
   facenet-pytorch \
   insightface \
   onnxruntime-gpu \
-  onnx
+  onnx \
+  torch
   
 . /scratch/sofyanali/.venv/bin/activate
 
