@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 import json
+import pandas as pd
 import torch
 import numpy as np
-import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import config
@@ -420,6 +420,13 @@ def main():
                 "rank1": d_rank1,
                 "mAP": d_map,
                 "asr": d_asr
+            },
+            "structural_metrics": {
+                "mean_ssim": float(np.mean(ssim_list)) if ssim_list else None,
+                "sd_ssim": float(np.std(ssim_list)) if ssim_list else None,
+                "mean_psnr": float(np.mean(psnr_list)) if psnr_list else None,
+                "sd_psnr": float(np.std(psnr_list)) if psnr_list else None,
+                "total_frames": len(ssim_list)
             }
         }
 
@@ -457,6 +464,18 @@ def main():
             cols.append(c)
     df_final = df_final[cols]
     
+    # Append a row with the mean values
+    mean_row = {
+        "clip_id": "MEAN",
+        "identity_id": "",
+        "ssim": df_final["ssim"].mean(),
+        "psnr": df_final["psnr"].mean(),
+        "is_query": "",
+        "rank1_success": df_final["rank1_success"].mean(),
+        "average_precision": df_final["average_precision"].mean()
+    }
+    df_final = pd.concat([df_final, pd.DataFrame([mean_row])], ignore_index=True)
+
     # Save to CSV
     run_name = getattr(config, "RETRIEVAL_RUN_NAME", "default_run")
     out_dir = Path(config.RETRIEVAL_OUTPUT_DIR) if getattr(config, "RETRIEVAL_OUTPUT_DIR", None) else Path("retrieval_results")
