@@ -3,7 +3,7 @@ import csv
 from pathlib import Path
 
 
-def build_manifest(root: Path, output_csv: Path, frames_root: Path = None) -> int:
+def build_manifest(root: Path, output_csv: Path, frames_root: Path = None, max_clips: int = None) -> int:
     """Build a CSV manifest by scanning v2e_root for all valid converted samples.
 
     Scans recursively for events.h5 files.  Infers identity_id from the
@@ -59,6 +59,9 @@ def build_manifest(root: Path, output_csv: Path, frames_root: Path = None) -> in
 
     # Sort for reproducibility
     manifest_entries.sort(key=lambda e: e["video_id"])
+    
+    if max_clips is not None:
+        manifest_entries = manifest_entries[:max_clips]
 
     # Write manifest
     output_path.parent.mkdir(parents=True, exist_ok=True)

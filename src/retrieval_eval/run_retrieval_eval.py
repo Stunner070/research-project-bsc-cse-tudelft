@@ -33,7 +33,11 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
         raw_manifest = m_path.parent / "manifest.csv"
         if not raw_manifest.exists():
             print("[PREREQ] Building manifest.csv...")
-            build_manifest(root=Path(v2e_root), output_csv=raw_manifest, frames_root=Path(frames_root))
+            build_manifest(
+                root=Path(v2e_root), 
+                output_csv=raw_manifest, 
+                frames_root=Path(frames_root)
+            )
             
         print("[PREREQ] Building manifest_enriched.csv...")
         build_splits(
@@ -45,8 +49,23 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
             min_clips_per_identity=2
         )
         
-    # Step 2 — Check for event frame .npy files
+    # Step 2 — Create evaluation manifest if RETRIEVAL_MAX_CLIPS is set
     df = pd.read_csv(m_path)
+    max_clips = getattr(config, 'RETRIEVAL_MAX_CLIPS', None)
+    
+    eval_path = m_path
+    if max_clips is not None:
+        eval_path = m_path.parent / f"manifest_eval_{max_clips}.csv"
+        print(f"[PREREQ] Limiting computations to {max_clips} clips...")
+        if "identity_id" in df.columns:
+            df = df.sort_values(["identity_id", "video_id"])
+        elif "identity" in df.columns:
+            df = df.sort_values(["identity", "video_id"])
+        else:
+            df = df.sort_values("video_id")
+        df = df.head(max_clips)
+        df.to_csv(eval_path, index=False)
+        
     if "role" in df.columns:
         df = df[df["role"].isin(["gallery", "query"])]
         
@@ -69,7 +88,7 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
     if missing_count > 0:
         print(f"[PREREQ] Converting events to frames for {missing_count} missing clips...")
         batch_convert_events(
-            manifest_csv=m_path,
+            manifest_csv=eval_path,
             output_root=Path(frames_root),
             dt=config.DEFAULT_DT,
             height=config.EVENT_HEIGHT,
@@ -82,11 +101,13 @@ def ensure_prerequisites(manifest_path, frames_root, v2e_root, work_dir):
         print("[PREREQ] All event frames already exist. Skipping conversion.")
         
     # Step 3 — Final check
-    if not m_path.exists():
+    if not eval_path.exists():
         raise RuntimeError(
-            f"Prerequisite check failed! The manifest expected at {m_path} does not exist "
+            f"Prerequisite check failed! The manifest expected at {eval_path} does not exist "
             f"after attempting to build it automatically. Please check your v2e_root and workspace directories."
         )
+        
+    return eval_path
 
 
 def align_manifests(
@@ -212,7 +233,7 @@ def main():
 
     # Dataset A (Baseline) — ensure prerequisites
     print(f"[A] Checking prerequisites for {config.RETRIEVAL_LABEL_A}...")
-    ensure_prerequisites(
+    config.RETRIEVAL_MANIFEST_A = ensure_prerequisites(
         manifest_path=config.RETRIEVAL_MANIFEST_A,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_A,
         v2e_root=config.RETRIEVAL_V2E_ROOT_A,
@@ -221,7 +242,7 @@ def main():
 
     # Dataset B (Adjusted) — ensure prerequisites
     print(f"\n[B] Checking prerequisites for {config.RETRIEVAL_LABEL_B}...")
-    ensure_prerequisites(
+    config.RETRIEVAL_MANIFEST_B = ensure_prerequisites(
         manifest_path=config.RETRIEVAL_MANIFEST_B,
         frames_root=config.RETRIEVAL_FRAMES_ROOT_B,
         v2e_root=config.RETRIEVAL_V2E_ROOT_B,
