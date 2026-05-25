@@ -12,8 +12,12 @@ module load 2025
 module load python/3.11.9
 module load py-scikit-learn
 
+rm /scratch/sofyanali/.venv/bin/python*
+ln -s `which python` /scratch/sofyanali/.venv/bin/python
+ln -s `which python3` /scratch/sofyanali/.venv/bin/python3
 
-source /scratch/sofyanali/.venv/bin/activate
+
+. /scratch/sofyanali/.venv/bin/activate
 
 
 #srun python /scratch/sofyanali/rpbsc/src/scripts/run_full_pipeline.py --mode event_frames_only  --device cuda --backbone facenet --privacy_eval
