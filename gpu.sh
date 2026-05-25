@@ -12,6 +12,8 @@ module load 2025
 module load python/3.11.9
 module load py-scikit-learn
 
+srun python -m ensurepip --upgrade
+
 srun python -m pip install \
   opencv-python \
   albumentations \
