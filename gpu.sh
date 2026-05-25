@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=testrun_resolution_640
-#SBATCH --partition=gpu
+#SBATCH --job-name=testrun_leak_5
+#SBATCH --partition=gpu-a100-small
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-task=1
@@ -12,22 +12,7 @@ module load 2025
 module load python/3.11.9
 module load py-scikit-learn
 
-srun python -m ensurepip --upgrade
 
-srun python -m pip install \
-  opencv-python \
-  albumentations \
-  tensorboard \
-  imageio-ffmpeg \
-  av \
-  lpips \
-  einops \
-  facenet-pytorch \
-  insightface \
-  onnxruntime-gpu \
-  onnx \
-  torch
-  
 . /scratch/sofyanali/.venv/bin/activate
 
 
