@@ -2,10 +2,10 @@
 #SBATCH --job-name=testrun_leak_5
 #SBATCH --partition=gpu-a100-small
 #SBATCH --account=education-eemcs-courses-cse3000
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=3GB
+#SBATCH --mem-per-cpu=6GB
 #SBATCH --time=03:00:00
 
 module load 2025
