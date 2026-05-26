@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=baseline_300clips
-#SBATCH --partition=gpu-a100-small
+#SBATCH --job-name=resolution_640_300clips
+#SBATCH --partition=gpu
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=3GB
-#SBATCH --time=04:00:00
+#SBATCH --mem-per-cpu=4GB
+#SBATCH --time=05:00:00
 
 module load 2025
 module load python/3.11.9
