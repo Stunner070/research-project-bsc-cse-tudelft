@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=testrun_resolution_640_300clips
+#SBATCH --job-name=leak_5_300clips
 #SBATCH --partition=gpu-a100-small
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=2
