@@ -21,6 +21,7 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import config as cfg
+from src.events_to_frames import load_events
 
 # ---------------------------------------------------------------------------
 # Lazy InsightFace import — only loaded when actually needed
