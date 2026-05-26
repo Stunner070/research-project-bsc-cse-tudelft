@@ -813,22 +813,73 @@ def extract_clip_embeddings(
                     break
 
                 h5_path = Path(v2e_root) / vid / "events.h5"
-                if not h5_path.exists():
+                
+                # Check for a wrapper H5 in v2e_root
+                wrapper_h5 = None
+                if Path(v2e_root).exists() and Path(v2e_root).is_dir():
+                    h5_files = list(Path(v2e_root).glob("*.h5"))
+                    h5_files = [f for f in h5_files if f.name not in ["txt.h5", "manifest.h5", "raw_metrics.h5"]]
+                    if h5_files:
+                        wrapper_h5 = h5_files[0]
+
+                # Verify H5 file existence (either individual or inside wrapper)
+                exists_ok = h5_path.exists()
+                if not exists_ok and wrapper_h5 is not None:
+                    import h5py
+                    try:
+                        with h5py.File(str(wrapper_h5), "r") as f_wrap:
+                            if vid in f_wrap:
+                                exists_ok = True
+                    except Exception:
+                        pass
+
+                if not exists_ok:
                     print(f"[SKIP] {vid}: events.h5 not found at {h5_path}")
                     skipped += 1
                     continue
+
+                # If wrapper exists, we extract events to a temporary file
+                temp_h5_path = None
+                if not h5_path.exists() and wrapper_h5 is not None:
+                    try:
+                        events = load_events(h5_path)
+                        temp_dir = Path("temp_h5")
+                        temp_dir.mkdir(exist_ok=True)
+                        temp_h5_path = temp_dir / f"{vid}_temp.h5"
+                        import h5py
+                        with h5py.File(temp_h5_path, "w") as f_temp:
+                            f_temp.create_dataset("events", data=events)
+                        h5_path = temp_h5_path
+                    except Exception as e:
+                        print(f"[SKIP] {vid}: Failed to extract events from wrapper H5 ({e})")
+                        skipped += 1
+                        continue
 
                 try:
                     frames_list = reconstruct_h5_to_memory(str(h5_path), e2vid_config.E2VID_MODEL_PATH, e2vid_config.config_dict)
                     if not frames_list:
                         print(f"[SKIP] {vid}: E2VID returned empty frame list")
                         skipped += 1
+                        if temp_h5_path is not None and temp_h5_path.exists():
+                            temp_h5_path.unlink()
                         continue
                     arr = np.stack(frames_list)
                 except Exception as e:
                     print(f"[SKIP] {vid}: E2VID reconstruction failed ({e})")
                     skipped += 1
+                    if temp_h5_path is not None and temp_h5_path.exists():
+                        try:
+                            temp_h5_path.unlink()
+                        except Exception:
+                            pass
                     continue
+
+                # Clean up temp file
+                if temp_h5_path is not None and temp_h5_path.exists():
+                    try:
+                        temp_h5_path.unlink()
+                    except Exception:
+                        pass
 
             else:
                 npy_path = _resolve_npy_path(row, frames_root)

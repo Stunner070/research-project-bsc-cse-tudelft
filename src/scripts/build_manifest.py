@@ -16,27 +16,55 @@ def build_manifest(root: Path, output_csv: Path, frames_root: Path = None, max_c
     seen_video_ids = set()
     manifest_entries = []
 
-    # --- primary source: events.h5 files under v2e_root ---
-    for events_path in root_path.rglob("events.h5"):
-        parent_dir = events_path.parent
-        video_id = parent_dir.name
+    # --- primary source: check for a single wrapper H5 or scan events.h5 files ---
+    wrapper_h5 = None
+    if root_path.exists() and root_path.is_dir():
+        h5_files = list(root_path.glob("*.h5"))
+        h5_files = [f for f in h5_files if f.name not in ["txt.h5", "manifest.h5", "raw_metrics.h5"]]
+        if h5_files:
+            wrapper_h5 = h5_files[0]
 
-        if video_id in seen_video_ids:
-            continue
-        seen_video_ids.add(video_id)
+    if wrapper_h5 is not None:
+        import h5py
+        print(f"Wrapper H5 detected: {wrapper_h5}. Discovered keys as video IDs...")
+        with h5py.File(str(wrapper_h5), "r") as f:
+            for video_id in f.keys():
+                if video_id in seen_video_ids:
+                    continue
+                seen_video_ids.add(video_id)
 
-        # Derive person-level identity from the naming convention
-        identity_id = video_id.split("_", 1)[0] if "_" in video_id else video_id
+                identity_id = video_id.split("_", 1)[0] if "_" in video_id else video_id
+                
+                # Keep events_path perfectly aligned with the folder-based scheme
+                events_path = root_path / video_id / "events.h5"
 
-        dvs_avi_path = parent_dir / "dvs.avi"
-        dvs_avi_str = str(dvs_avi_path.resolve()) if dvs_avi_path.exists() else ""
+                manifest_entries.append({
+                    "video_id": video_id,
+                    "identity_id": identity_id,
+                    "events_path": str(events_path.resolve()),
+                    "dvs_avi_path": "",
+                })
+    else:
+        for events_path in root_path.rglob("events.h5"):
+            parent_dir = events_path.parent
+            video_id = parent_dir.name
 
-        manifest_entries.append({
-            "video_id": video_id,
-            "identity_id": identity_id,
-            "events_path": str(events_path.resolve()),
-            "dvs_avi_path": dvs_avi_str,
-        })
+            if video_id in seen_video_ids:
+                continue
+            seen_video_ids.add(video_id)
+
+            # Derive person-level identity from the naming convention
+            identity_id = video_id.split("_", 1)[0] if "_" in video_id else video_id
+
+            dvs_avi_path = parent_dir / "dvs.avi"
+            dvs_avi_str = str(dvs_avi_path.resolve()) if dvs_avi_path.exists() else ""
+
+            manifest_entries.append({
+                "video_id": video_id,
+                "identity_id": identity_id,
+                "events_path": str(events_path.resolve()),
+                "dvs_avi_path": dvs_avi_str,
+            })
 
     # --- secondary source: already-converted event_frames.npy in frames_root ---
     if frames_root is not None:

@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=resolution_640_300clips
+#SBATCH --job-name=cutoff_100_300clips
 #SBATCH --partition=gpu
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=4GB
+#SBATCH --mem-per-cpu=6GB
 #SBATCH --time=05:00:00
 
 module load 2025

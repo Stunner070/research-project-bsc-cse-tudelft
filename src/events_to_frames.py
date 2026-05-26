@@ -10,7 +10,43 @@ def load_events(h5_path: Union[str, Path]) -> np.ndarray:
     """
     Opens the HDF5 file, reads the 'events' dataset into a NumPy array of dtype float32,
     and returns an array of shape (N, 4) -> [t, x, y, p].
+    Supports both individual events.h5 files and single wrapper .h5 files.
     """
+    h5_path = Path(h5_path)
+    video_id = h5_path.parent.name
+    v2e_root = h5_path.parent.parent
+
+    # Try to find a wrapper .h5 file in the v2e_root directory
+    wrapper_h5 = None
+    if v2e_root.exists() and v2e_root.is_dir():
+        h5_files = list(v2e_root.glob("*.h5"))
+        # Exclude common metadata files
+        h5_files = [f for f in h5_files if f.name not in ["txt.h5", "manifest.h5", "raw_metrics.h5"]]
+        if h5_files:
+            wrapper_h5 = h5_files[0]
+
+    if wrapper_h5 is not None:
+        with h5py.File(str(wrapper_h5), "r") as f:
+            possible_keys = [
+                f"{video_id}/events",
+                f"{video_id}/events.h5/events",
+                f"{video_id}/events.h5",
+                video_id
+            ]
+            events_ds = None
+            for k in possible_keys:
+                if k in f:
+                    if isinstance(f[k], h5py.Dataset):
+                        events_ds = f[k]
+                        break
+                    elif isinstance(f[k], h5py.Group) and "events" in f[k]:
+                        events_ds = f[k]["events"]
+                        break
+            
+            if events_ds is not None:
+                return np.array(events_ds, dtype=np.float32)
+
+    # Fallback to the original logic
     with h5py.File(str(h5_path), "r") as f:
         events = np.array(f["events"], dtype=np.float32)
     return events

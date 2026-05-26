@@ -51,7 +51,18 @@ def batch_convert_events(manifest_csv: Path, output_root: Path, dt: float,
         if out_file.exists() and not force:
             return (True, f"[{i}/{total_videos}] Skipping {video_id}, file already exists.")
 
-        if not events_path.exists():
+        # Check if either individual events_path exists or a single wrapper .h5 file exists
+        exists_ok = events_path.exists()
+        if not exists_ok:
+            # Check for a wrapper H5 in v2e_root (events_path.parent.parent)
+            v2e_root = events_path.parent.parent
+            if v2e_root.exists() and v2e_root.is_dir():
+                h5_files = list(v2e_root.glob("*.h5"))
+                h5_files = [f for f in h5_files if f.name not in ["txt.h5", "manifest.h5", "raw_metrics.h5"]]
+                if h5_files:
+                    exists_ok = True
+
+        if not exists_ok:
             return (False, f"[{i}/{total_videos}] Error: {events_path} not found. Skipping.")
 
         try:
