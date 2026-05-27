@@ -47,21 +47,21 @@ RETRIEVAL_LABEL_A        = "Baseline"
 
 # Dataset B (Adjusted) — source and output roots
 # RETRIEVAL_V2E_ROOT_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/leak_5")     # V2E source root for adjusted
-RETRIEVAL_V2E_ROOT_B = Path("/scratch/sofyanali/voxceleb/dev/resolution_640")
+RETRIEVAL_V2E_ROOT_B = Path("/scratch/sofyanali/voxceleb/dev/cutoff_100")
 # RETRIEVAL_WORK_DIR_B     = Path("C:/Users/sofya/Desktop/event_videos/voxceleb/output_leak_5")  # Derived-output root for adjusted
-RETRIEVAL_WORK_DIR_B = Path("/scratch/sofyanali/voxceleb/dev/output_resolution_640")  # Derived-output root for adjusted
+RETRIEVAL_WORK_DIR_B = Path("/scratch/sofyanali/voxceleb/dev/output_cutoff_100")  # Derived-output root for adjusted
 
 # Dataset B — derived paths (built from roots above)
 RETRIEVAL_MANIFEST_DIR_B = RETRIEVAL_WORK_DIR_B / "manifests"
 RETRIEVAL_FRAMES_ROOT_B  = RETRIEVAL_WORK_DIR_B / "frames"
 RETRIEVAL_MANIFEST_B     = RETRIEVAL_MANIFEST_DIR_B / "manifest_enriched.csv"
-RETRIEVAL_LABEL_B        = "resolution_640"
+RETRIEVAL_LABEL_B        = "cutoff_100"
 
 # Shared retrieval settings
 RETRIEVAL_PIPELINE_MODE  = "RAW_NPY"    # "RAW_NPY" (pre-computed .npy) | "E2VID" (dynamic reconstruct)
 RETRIEVAL_MAX_CLIPS      = 300          # Maximum number of clips to process from v2e roots (set to None for all)
 RETRIEVAL_WEIGHTS_PATH   = PROJECT_ROOT / "models_weights" / "20180402-114759-vggface2.pt"  # Pretrained FaceNet backbone state dict
-RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_resolution_640"  # Folder to write the comparison JSON (independent of either work dir)
+RETRIEVAL_OUTPUT_DIR     = PROJECT_ROOT / "retrieval_results_cutoff_100_10frames"  # Folder to write the comparison JSON (independent of either work dir)
 RETRIEVAL_BATCH_SIZE     = 32  # Inference batch size for retrieval dataloaders
 
 # ─── Retrieval Model & Feature Settings ──────────────────────────────────────
@@ -81,7 +81,7 @@ RETRIEVAL_ANNOTATION_FALLBACK = "median"         # Missing frame fallback: "near
 
 # ─── Temporal Sampling Settings ──────────────────────────────────────────────
 RETRIEVAL_TEMPORAL_MODE       = "multi_average"         # Frame selection: "center" (single T//2) | "multi_average"
-RETRIEVAL_NUM_SAMPLE_FRAMES   = 5               # Number of frames to sample when mode is "multi_average"
+RETRIEVAL_NUM_SAMPLE_FRAMES   = 10               # Number of frames to sample when mode is "multi_average"
 RETRIEVAL_FRAME_SAMPLE_STRATEGY = "uniform"      # Sampling strategy: "uniform" (evenly spaced) | "center_window"
 
 # ─── InsightFace-specific Settings (frozen inference only) ───────────────────
@@ -95,4 +95,4 @@ RETRIEVAL_DEBUG_CROP_DIR       = PROJECT_ROOT / "retrieval_debug_crops"  # Outpu
 RETRIEVAL_DEBUG_CROP_MAX       = 50                             # Max number of debug crops saved per run
 
 # ─── Evaluation Run ──────────────────────────────────────────────────────────
-RETRIEVAL_RUN_NAME             = "resolution_640"                       # Name used to export the CSV file with raw metrics
+RETRIEVAL_RUN_NAME             = "cutoff_100_10frames"                       # Name used to export the CSV file with raw metrics
