@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=on_symmetry_300clips
-#SBATCH --partition=gpu-a100-small
+#SBATCH --job-name=resolution_640
+#SBATCH --partition=gpu
 #SBATCH --account=education-eemcs-courses-cse3000
 #SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
