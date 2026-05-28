@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=6GB
+#SBATCH --mem-per-cpu=5GB
 #SBATCH --time=08:00:00
 
 module load 2025
